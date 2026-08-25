@@ -342,288 +342,7 @@ function renderDashboardScreen(store) {
     `;
 }
 
-// SCREEN 3: EMPLOYEES TABLE
-function renderEmployeesScreen(store) {
-    return `
-    <div class="space-y-6 fade-in">
-        <!-- Page Header -->
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-900">Employees</h1>
-                <p class="text-sm text-slate-500 mt-0.5">Manage team directory, capability progress, and course enrollments.</p>
-            </div>
-            <div>
-                <button onclick="openAddEmployeeModal()" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition">
-                    <i data-lucide="user-plus" class="w-4 h-4"></i>
-                    <span>+ Add Employee</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Filter & Search Card -->
-        <div class="admin-card p-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                <div class="lg:col-span-2 relative">
-                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-3"></i>
-                    <input type="text" id="employee-search-input" onkeyup="filterEmployeesTable()"
-                        placeholder="Search by employee name or ID..."
-                        class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition" />
-                </div>
-
-                <div>
-                    <select id="employee-filter-role" onchange="filterEmployeesTable()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Roles</option>
-                        <option value="Relationship Manager">Relationship Manager</option>
-                        <option value="TBM">TBM (Territory Branch Mgr)</option>
-                        <option value="ABM">ABM (Area Branch Mgr)</option>
-                        <option value="RBH">RBH (Regional Head)</option>
-                    </select>
-                </div>
-
-                <div>
-                    <select id="employee-filter-location" onchange="filterEmployeesTable()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Locations</option>
-                        <option value="Bangalore">Bangalore</option>
-                        <option value="Delhi">Delhi</option>
-                        <option value="Mumbai">Mumbai</option>
-                        <option value="Hyderabad">Hyderabad</option>
-                    </select>
-                </div>
-
-                <div>
-                    <select id="employee-filter-status" onchange="filterEmployeesTable()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Statuses</option>
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-
-        <!-- Employee Table -->
-        <div class="admin-card overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs" id="employees-table">
-                    <thead>
-                        <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
-                            <th class="py-3.5 px-4">Employee ID</th>
-                            <th class="py-3.5 px-4">Employee</th>
-                            <th class="py-3.5 px-4">Role</th>
-                            <th class="py-3.5 px-4">Location</th>
-                            <th class="py-3.5 px-4">Manager</th>
-                            <th class="py-3.5 px-4">Progress</th>
-                            <th class="py-3.5 px-4 text-center">Courses</th>
-                            <th class="py-3.5 px-4">Status</th>
-                            <th class="py-3.5 px-4 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 font-medium text-slate-700" id="employees-tbody">
-                        ${store.employees.map(emp => `
-                            <tr class="hover:bg-slate-50/70 transition cursor-pointer" onclick="window.adminStore.navigate('employee-detail', { employeeId: '${emp.id}' })">
-                                <td class="py-3.5 px-4 font-mono font-bold text-blue-600">${emp.id}</td>
-                                <td class="py-3.5 px-4 font-semibold text-slate-900">
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="w-8 h-8 rounded-full ${emp.avatarBg || 'bg-blue-600'} text-white flex items-center justify-center text-xs font-bold shrink-0">
-                                            ${emp.name.split(' ').map(n=>n[0]).join('')}
-                                        </div>
-                                        <div>
-                                            <div class="text-slate-900">${emp.name}</div>
-                                            <div class="text-[11px] text-slate-400 font-normal">${emp.email}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="py-3.5 px-4 text-slate-600">${emp.role}</td>
-                                <td class="py-3.5 px-4 text-slate-600">${emp.location}</td>
-                                <td class="py-3.5 px-4 text-slate-600">${emp.manager}</td>
-                                <td class="py-3.5 px-4 w-36">
-                                    <div class="flex items-center gap-2">
-                                        <div class="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${emp.progress}%"></div>
-                                        </div>
-                                        <span class="text-[11px] font-bold text-slate-700">${emp.progress}%</span>
-                                    </div>
-                                </td>
-                                <td class="py-3.5 px-4 text-center font-bold text-slate-900">${emp.coursesAssigned}</td>
-                                <td class="py-3.5 px-4">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${emp.status === 'Active' ? 'badge-active' : 'badge-inactive'}">
-                                        ${emp.status}
-                                    </span>
-                                </td>
-                                <td class="py-3.5 px-4 text-right">
-                                    <button class="px-2.5 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-600 text-slate-600 rounded-lg text-xs font-semibold transition">
-                                        View
-                                    </button>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    `;
-}
-
-function filterEmployeesTable() {
-    const q = (document.getElementById("employee-search-input")?.value || "").toLowerCase();
-    const role = (document.getElementById("employee-filter-role")?.value || "").toLowerCase();
-    const location = (document.getElementById("employee-filter-location")?.value || "").toLowerCase();
-    const status = (document.getElementById("employee-filter-status")?.value || "").toLowerCase();
-
-    const rows = document.querySelectorAll("#employees-tbody tr");
-    rows.forEach(row => {
-        const text = row.innerText.toLowerCase();
-        const matchesQ = !q || text.includes(q);
-        const matchesRole = !role || text.includes(role);
-        const matchesLoc = !location || text.includes(location);
-        const matchesStatus = !status || text.includes(status);
-
-        row.style.display = (matchesQ && matchesRole && matchesLoc && matchesStatus) ? "" : "none";
-    });
-}
-
-function openAddEmployeeModal() {
-    document.getElementById("add-employee-modal").classList.remove("hidden");
-    lucide.createIcons();
-}
-
-function closeAddEmployeeModal() {
-    document.getElementById("add-employee-modal").classList.add("hidden");
-}
-
-function handleAddEmployeeSubmit(e) {
-    e.preventDefault();
-    const name = document.getElementById("new-emp-name").value;
-    const role = document.getElementById("new-emp-role").value;
-    const location = document.getElementById("new-emp-location").value;
-    const manager = document.getElementById("new-emp-manager").value;
-
-    const newEmp = window.adminStore.addEmployee({ name, role, location, manager });
-    closeAddEmployeeModal();
-    showToast(`Employee ${newEmp.name} (${newEmp.id}) added successfully!`, "user-plus");
-}
-
-// SCREEN 4: EMPLOYEE DETAIL
-function renderEmployeeDetailScreen(store) {
-    const emp = store.getEmployeeById(store.selectedEmployeeId);
-
-    return `
-    <div class="space-y-6 fade-in">
-        <!-- Back Navigation & Breadcrumb -->
-        <div class="flex items-center gap-2 text-xs text-slate-500">
-            <button onclick="window.adminStore.goBack()" class="hover:text-slate-900 font-semibold flex items-center gap-1">
-                <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
-                <span>Employees</span>
-            </button>
-            <span>/</span>
-            <span class="text-slate-900 font-bold">${emp.name} (${emp.id})</span>
-        </div>
-
-        <!-- Header Profile Identity Card -->
-        <div class="admin-card p-6">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 rounded-2xl ${emp.avatarBg || 'bg-blue-600'} text-white flex items-center justify-center text-xl font-bold shadow-sm">
-                        ${emp.name.split(' ').map(n=>n[0]).join('')}
-                    </div>
-                    <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-2xl font-bold text-slate-900">${emp.name}</h1>
-                            <span class="font-mono text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">${emp.id}</span>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${emp.status === 'Active' ? 'badge-active' : 'badge-inactive'}">
-                                ${emp.status}
-                            </span>
-                        </div>
-                        <p class="text-xs text-slate-500 mt-1">${emp.role} &bull; ${emp.location} &bull; Manager: <strong class="text-slate-700">${emp.manager}</strong></p>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <button onclick="window.adminStore.navigate('assignments')" class="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm transition">
-                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
-                        <span>Assign Course</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 4 KPI Metrics -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="admin-card p-4">
-                <span class="text-xs font-semibold text-slate-500 uppercase">Courses Assigned</span>
-                <div class="text-2xl font-extrabold text-slate-900 mt-1">${emp.coursesAssigned}</div>
-            </div>
-            <div class="admin-card p-4">
-                <span class="text-xs font-semibold text-slate-500 uppercase">Completed</span>
-                <div class="text-2xl font-extrabold text-emerald-600 mt-1">${emp.coursesCompleted}</div>
-            </div>
-            <div class="admin-card p-4">
-                <span class="text-xs font-semibold text-slate-500 uppercase">In Progress</span>
-                <div class="text-2xl font-extrabold text-blue-600 mt-1">${emp.coursesInProgress}</div>
-            </div>
-            <div class="admin-card p-4">
-                <span class="text-xs font-semibold text-slate-500 uppercase">Average Score</span>
-                <div class="text-2xl font-extrabold text-slate-900 mt-1">${emp.avgScore ? emp.avgScore + '%' : '—'}</div>
-            </div>
-        </div>
-
-        <!-- COURSE PROGRESS TABLE -->
-        <div class="admin-card p-6">
-            <div class="flex items-center justify-between mb-4">
-                <div>
-                    <h2 class="text-base font-bold text-slate-900">COURSE PROGRESS</h2>
-                    <p class="text-xs text-slate-500">Individual course track completions, scores, and activity timestamps.</p>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs">
-                    <thead>
-                        <tr class="border-b border-slate-100 text-slate-400 font-semibold uppercase tracking-wider">
-                            <th class="pb-3">Course</th>
-                            <th class="pb-3">Status</th>
-                            <th class="pb-3">Progress</th>
-                            <th class="pb-3 text-center">Score</th>
-                            <th class="pb-3 text-right">Last Activity</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-50 font-medium text-slate-700">
-                        ${(emp.courseProgress && emp.courseProgress.length > 0 ? emp.courseProgress : [
-                            { title: "Gold Loan Product Knowledge", status: "In Progress", progress: 65, score: null, lastActivity: "24 Aug 2026" },
-                            { title: "Sales Excellence", status: "Not Started", progress: 0, score: null, lastActivity: "—" },
-                            { title: "Customer Handling Excellence", status: "Completed", progress: 100, score: 88, lastActivity: "20 Aug 2026" },
-                            { title: "Collections & Retention", status: "In Progress", progress: 30, score: 72, lastActivity: "22 Aug 2026" }
-                        ]).map(cp => `
-                            <tr class="hover:bg-slate-50/70 transition">
-                                <td class="py-3.5 pr-4 font-semibold text-slate-900 flex items-center gap-2">
-                                    <i data-lucide="book" class="w-3.5 h-3.5 text-blue-500"></i>
-                                    <span>${cp.title}</span>
-                                </td>
-                                <td class="py-3.5">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase
-                                        ${cp.status === 'Completed' ? 'badge-published' : cp.status === 'In Progress' ? 'badge-mandatory' : 'badge-inactive'}">
-                                        ${cp.status}
-                                    </span>
-                                </td>
-                                <td class="py-3.5 pr-4 w-40">
-                                    <div class="flex items-center gap-2">
-                                        <div class="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                            <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${cp.progress}%"></div>
-                                        </div>
-                                        <span class="text-[11px] font-bold text-slate-700">${cp.progress}%</span>
-                                    </div>
-                                </td>
-                                <td class="py-3.5 text-center font-bold text-slate-900">${cp.score !== null ? cp.score + '%' : '—'}</td>
-                                <td class="py-3.5 text-right text-slate-500 font-mono">${cp.lastActivity}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    `;
-}
+// (Employee screens and handlers are modularized in js/employee-mgmt.js)
 
 // SCREEN 5: COURSES CATALOG
 function renderCoursesScreen(store) {
@@ -2057,51 +1776,214 @@ function renderApp() {
         </main>
     </div>
 
-    <!-- MODAL: ADD EMPLOYEE -->
+    <!-- MODAL 1: ADD EMPLOYEE -->
     <div id="add-employee-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl fade-in">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl fade-in max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
-                <h3 class="text-base font-bold text-slate-900">Add New Employee</h3>
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">Add New Employee</h3>
+                    <p class="text-xs text-slate-500">Create a new employee master record with assigned learning permissions.</p>
+                </div>
                 <button onclick="closeAddEmployeeModal()" class="text-slate-400 hover:text-slate-600 p-1">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
             <form onsubmit="handleAddEmployeeSubmit(event)" class="space-y-3.5 text-xs">
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Full Name</label>
-                    <input type="text" id="new-emp-name" required placeholder="e.g. Sumanth Rao" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500" />
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Employee ID <span class="text-rose-500">*</span></label>
+                        <input type="text" id="new-emp-id" required placeholder="e.g. EMP009" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-mono font-bold text-blue-700 focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Full Name <span class="text-rose-500">*</span></label>
+                        <input type="text" id="new-emp-name" required placeholder="e.g. Rohan Verma" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500" />
+                    </div>
                 </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Designation / Role</label>
-                    <select id="new-emp-role" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
-                        <option value="Relationship Manager">Relationship Manager</option>
-                        <option value="TBM">TBM (Territory Branch Mgr)</option>
-                        <option value="ABM">ABM (Area Branch Mgr)</option>
-                        <option value="RBH">RBH (Regional Head)</option>
-                    </select>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Email ID <span class="text-rose-500">*</span></label>
+                        <input type="email" id="new-emp-email" required placeholder="rohan.verma@skillup.com" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Mobile Number <span class="text-slate-400 font-normal">(Optional)</span></label>
+                        <input type="tel" id="new-emp-phone" placeholder="+91 98765 00000" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500" />
+                    </div>
                 </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Operating Location</label>
-                    <select id="new-emp-location" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
-                        <option value="Bangalore">Bangalore</option>
-                        <option value="Delhi">Delhi</option>
-                        <option value="Mumbai">Mumbai</option>
-                        <option value="Hyderabad">Hyderabad</option>
-                    </select>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Designation / Role <span class="text-rose-500">*</span></label>
+                        <select id="new-emp-role" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
+                            <option value="Relationship Manager">Relationship Manager</option>
+                            <option value="TBM">TBM (Territory Branch Mgr)</option>
+                            <option value="ABM">ABM (Area Branch Mgr)</option>
+                            <option value="RBH">RBH (Regional Head)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Operating Location <span class="text-rose-500">*</span></label>
+                        <select id="new-emp-location" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
+                            <option value="Bangalore">Bangalore</option>
+                            <option value="Delhi">Delhi</option>
+                            <option value="Mumbai">Mumbai</option>
+                            <option value="Hyderabad">Hyderabad</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label class="block font-semibold text-slate-700 mb-1">Reporting Manager</label>
-                    <select id="new-emp-manager" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
-                        <option value="Amit Kumar">Amit Kumar</option>
-                        <option value="Priya Sharma">Priya Sharma</option>
-                        <option value="Raj Kumar">Raj Kumar</option>
-                    </select>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Reporting Manager <span class="text-rose-500">*</span></label>
+                        <select id="new-emp-manager" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
+                            <option value="Amit Kumar">Amit Kumar</option>
+                            <option value="Priya Sharma">Priya Sharma</option>
+                            <option value="Raj Kumar">Raj Kumar</option>
+                            <option value="Vikram Patel">Vikram Patel</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Employment Status <span class="text-rose-500">*</span></label>
+                        <select id="new-emp-status" class="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-medium focus:ring-2 focus:ring-blue-500">
+                            <option value="Active">Active Employee</option>
+                            <option value="Inactive">Inactive / Separated</option>
+                        </select>
+                    </div>
                 </div>
+
+                <!-- SkillUp Access Toggle -->
+                <div class="p-3.5 bg-blue-50/60 border border-blue-100 rounded-xl flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-slate-900">SkillUp Portal Access</div>
+                        <div class="text-[11px] text-slate-500">Grant login rights and course curriculum participation.</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="new-emp-access" checked class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
                 <div class="pt-3 flex justify-end gap-2 border-t border-slate-100">
-                    <button type="button" onclick="closeAddEmployeeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl">Cancel</button>
-                    <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl">Create Employee</button>
+                    <button type="button" onclick="closeAddEmployeeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition">Cancel</button>
+                    <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition">Create Employee</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: BULK IMPORT EMPLOYEES -->
+    <div id="bulk-import-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl fade-in max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 shrink-0">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900">Bulk Import Employees</h3>
+                    <p class="text-xs text-slate-500">Upload an employee roster CSV file to onboard or sync team master data.</p>
+                </div>
+                <button onclick="closeBulkImportModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- STEP 1: UPLOAD -->
+            <div id="bulk-import-step-upload" class="space-y-4 text-xs py-2">
+                <div class="border-2 border-dashed border-slate-200 hover:border-blue-500 rounded-2xl p-8 text-center transition bg-slate-50/50 flex flex-col items-center justify-center cursor-pointer" onclick="document.getElementById('csv-file-input').click()">
+                    <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                        <i data-lucide="upload-cloud" class="w-7 h-7"></i>
+                    </div>
+                    <h4 class="text-sm font-bold text-slate-900">Choose CSV file or drag & drop here</h4>
+                    <p class="text-slate-500 text-xs mt-1">Standard SkillUp employee schema supported (.csv)</p>
+                    <input type="file" id="csv-file-input" accept=".csv" class="hidden" onchange="handleCsvFileSelect(event)" />
+                    <button type="button" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs shadow-sm transition">
+                        Select CSV File
+                    </button>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between">
+                    <div>
+                        <div class="font-bold text-slate-800">Need the official format?</div>
+                        <div class="text-slate-500 text-[11px]">Download our pre-formatted template with all required columns and sample rows.</div>
+                    </div>
+                    <button type="button" onclick="downloadCsvTemplate()" class="px-3.5 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-xl flex items-center gap-1.5 transition">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Download Template</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- STEP 2: VALIDATION & PREVIEW -->
+            <div id="bulk-import-step-preview" class="space-y-4 text-xs flex-1 overflow-hidden flex flex-col hidden">
+                <div class="flex items-center justify-between bg-slate-50 p-3.5 rounded-xl border border-slate-100 shrink-0">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4 text-blue-600"></i>
+                        <span id="import-file-name" class="font-bold text-slate-900">employees.csv</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-slate-200 text-slate-700" id="import-stat-total">0 rows</span>
+                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-emerald-100 text-emerald-800" id="import-stat-valid">0 valid</span>
+                        <span class="px-2.5 py-0.5 rounded-full font-bold text-[11px] bg-rose-100 text-rose-800" id="import-stat-errors">0 errors</span>
+                    </div>
+                </div>
+
+                <!-- Errors list if any -->
+                <div id="import-errors-section" class="shrink-0 space-y-1.5 max-h-32 overflow-y-auto hidden">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-rose-700">Rows requiring attention:</div>
+                    <div id="import-errors-list" class="space-y-1"></div>
+                </div>
+
+                <!-- Preview table -->
+                <div class="flex-1 overflow-y-auto border border-slate-200 rounded-xl">
+                    <table class="w-full text-left text-xs">
+                        <thead class="sticky top-0 bg-slate-100 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                            <tr>
+                                <th class="py-2.5 px-3">Employee ID</th>
+                                <th class="py-2.5 px-3">Name</th>
+                                <th class="py-2.5 px-3">Email</th>
+                                <th class="py-2.5 px-3">Role</th>
+                                <th class="py-2.5 px-3">Location</th>
+                                <th class="py-2.5 px-3">Employment</th>
+                                <th class="py-2.5 px-3">SkillUp Access</th>
+                            </tr>
+                        </thead>
+                        <tbody id="import-preview-tbody" class="divide-y divide-slate-100 font-medium text-slate-700"></tbody>
+                    </table>
+                </div>
+
+                <div class="pt-3 flex items-center justify-between border-t border-slate-100 shrink-0">
+                    <button type="button" onclick="openBulkImportModal()" class="text-slate-500 hover:text-slate-700 font-semibold flex items-center gap-1">
+                        <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                        <span>Upload Another File</span>
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="closeBulkImportModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition">Cancel</button>
+                        <button type="button" id="execute-import-btn" onclick="executeBulkImport()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition">
+                            Import Employees
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ACCESS & COURSE CONFIRMATION -->
+    <div id="access-confirm-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl fade-in">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                <h3 class="text-base font-bold text-slate-900" id="access-modal-title">Confirm Access Action</h3>
+                <button onclick="closeAccessModal()" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <div id="access-modal-message" class="mb-6"></div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeAccessModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition">
+                    Cancel
+                </button>
+                <button type="button" id="access-modal-confirm-btn" onclick="confirmAccessModalAction()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl transition">
+                    Confirm
+                </button>
+            </div>
         </div>
     </div>
     `;

@@ -1,16 +1,17 @@
 // SkillUp Enterprise Admin Portal - Local State Management Store
-// Handles reactive routing, CRUD operations in local memory/localStorage, and audit trails
+// Handles reactive routing, master data CRUD, access controls, course lifecycle & audit trails
 
 class AdminStore {
     constructor() {
-        this.loadState();
         this.subscribers = [];
         this.navigationStack = [];
+        this.selectedEmployeeIds = new Set();
+        this.loadState();
     }
 
     loadState() {
         try {
-            const savedState = localStorage.getItem("skillup_admin_state_v2");
+            const savedState = localStorage.getItem("skillup_admin_state_v3");
             if (savedState) {
                 const parsed = JSON.parse(savedState);
                 this.adminUser = parsed.adminUser || INITIAL_ADMIN_USER;
@@ -20,6 +21,7 @@ class AdminStore {
                 this.assignments = parsed.assignments || INITIAL_ASSIGNMENTS;
                 this.notifications = parsed.notifications || INITIAL_NOTIFICATIONS;
                 this.activities = parsed.activities || INITIAL_ACTIVITIES;
+                this.auditLogs = parsed.auditLogs || INITIAL_AUDIT_LOGS;
                 this.isLoggedIn = parsed.isLoggedIn !== undefined ? parsed.isLoggedIn : true;
                 this.currentRoute = parsed.currentRoute || "dashboard";
                 this.selectedEmployeeId = parsed.selectedEmployeeId || "EMP001";
@@ -35,6 +37,8 @@ class AdminStore {
                     autoOverdueAlerts: true,
                     twoFactorAuth: false
                 };
+                // Ensure all employees have full master data & compatibility properties
+                this.normalizeEmployees();
                 return;
             }
         } catch (e) {
@@ -48,6 +52,7 @@ class AdminStore {
         this.assignments = JSON.parse(JSON.stringify(INITIAL_ASSIGNMENTS));
         this.notifications = JSON.parse(JSON.stringify(INITIAL_NOTIFICATIONS));
         this.activities = JSON.parse(JSON.stringify(INITIAL_ACTIVITIES));
+        this.auditLogs = JSON.parse(JSON.stringify(INITIAL_AUDIT_LOGS));
         this.isLoggedIn = true;
         this.currentRoute = "dashboard";
         this.selectedEmployeeId = "EMP001";
@@ -63,7 +68,28 @@ class AdminStore {
             autoOverdueAlerts: true,
             twoFactorAuth: false
         };
+        this.normalizeEmployees();
         this.saveState();
+    }
+
+    normalizeEmployees() {
+        if (!this.employees) return;
+        this.employees.forEach(emp => {
+            emp.employeeId = emp.employeeId || emp.id;
+            emp.fullName = emp.fullName || emp.name;
+            emp.mobileNumber = emp.mobileNumber || emp.phone || "";
+            emp.employmentStatus = emp.employmentStatus || (emp.status === "Inactive" ? "Inactive" : "Active");
+            emp.status = emp.employmentStatus; // backward compatibility
+            emp.skillupAccessEnabled = emp.skillupAccessEnabled !== undefined ? emp.skillupAccessEnabled : (emp.status === "Active");
+            if (emp.courseProgress) {
+                emp.courseProgress.forEach(cp => {
+                    if (cp.status === "In Progress" || cp.status === "IN PROGRESS") cp.status = "IN PROGRESS";
+                    else if (cp.status === "Completed" || cp.status === "COMPLETED") cp.status = "COMPLETED";
+                    else if (cp.status === "Revoked" || cp.status === "REVOKED") cp.status = "REVOKED";
+                    else if (cp.status === "Not Started" || cp.status === "ASSIGNED") cp.status = "ASSIGNED";
+                });
+            }
+        });
     }
 
     saveState() {
@@ -76,6 +102,7 @@ class AdminStore {
                 assignments: this.assignments,
                 notifications: this.notifications,
                 activities: this.activities,
+                auditLogs: this.auditLogs,
                 isLoggedIn: this.isLoggedIn,
                 currentRoute: this.currentRoute,
                 selectedEmployeeId: this.selectedEmployeeId,
@@ -85,7 +112,7 @@ class AdminStore {
                 editingQuizId: this.editingQuizId,
                 settings: this.settings
             };
-            localStorage.setItem("skillup_admin_state_v2", JSON.stringify(state));
+            localStorage.setItem("skillup_admin_state_v3", JSON.stringify(state));
         } catch (e) {
             console.error("Storage error:", e);
         }
@@ -122,6 +149,11 @@ class AdminStore {
         if (params.lessonId !== undefined) this.editingLessonId = params.lessonId;
         if (params.quizId !== undefined) this.editingQuizId = params.quizId;
 
+        // Clear row selection on screen navigation
+        if (route !== 'employees') {
+            this.selectedEmployeeIds.clear();
+        }
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
         this.notify();
     }
@@ -136,7 +168,6 @@ class AdminStore {
             if (previous.params.editingLessonId !== undefined) this.editingLessonId = previous.params.editingLessonId;
             if (previous.params.editingQuizId !== undefined) this.editingQuizId = previous.params.editingQuizId;
         } else {
-            // Default fallback
             if (this.currentRoute === 'employee-detail') this.currentRoute = 'employees';
             else if (this.currentRoute === 'lesson-editor' || this.currentRoute === 'quiz-builder') this.currentRoute = 'course-builder';
             else if (this.currentRoute === 'course-builder') this.currentRoute = 'courses';
@@ -166,52 +197,228 @@ class AdminStore {
         this.notify();
     }
 
-    // Activities
+    // Activities & Audit Logs
     addActivity(text, type = "general", icon = "activity", color = "text-blue-500") {
         this.activities.unshift({
-            id: `ACT-${Date.now()}`,
+            id: `ACT-${Date.now()}-${Math.floor(Math.random()*1000)}`,
             text,
             time: "Just now",
             type,
             icon,
             color
         });
-        if (this.activities.length > 20) this.activities.pop();
+        if (this.activities.length > 25) this.activities.pop();
     }
 
-    // Employees
+    logAudit(adminId, employeeId, employeeName, action, details = "") {
+        const now = new Date();
+        const dateFormatted = `${now.getDate()} ${now.toLocaleString('default', { month: 'short' })} ${now.getFullYear()}`;
+        const timeFormatted = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        const newAudit = {
+            id: `AUD-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+            date: dateFormatted,
+            timestamp: `${dateFormatted}, ${timeFormatted}`,
+            adminId: adminId || this.adminUser.id,
+            employeeId,
+            employeeName,
+            action,
+            details
+        };
+        this.auditLogs.unshift(newAudit);
+        if (this.auditLogs.length > 100) this.auditLogs.pop();
+    }
+
+    getAuditLogsForEmployee(employeeId) {
+        return this.auditLogs.filter(log => log.employeeId === employeeId);
+    }
+
+    // Employee Master Management
     getEmployeeById(id) {
-        return this.employees.find(e => e.id === id) || this.employees[0];
+        return this.employees.find(e => e.id === id || e.employeeId === id) || this.employees[0];
     }
 
     addEmployee(empData) {
-        const newId = `EMP00${this.employees.length + 1}`;
+        // Validate required fields
+        if (!empData.employeeId || !empData.fullName || !empData.email || !empData.role || !empData.location || !empData.manager || !empData.employmentStatus) {
+            throw new Error("Missing required employee master data fields.");
+        }
+
+        const cleanId = empData.employeeId.trim().toUpperCase();
+        // Check uniqueness
+        const exists = this.employees.some(e => (e.id && e.id.toUpperCase() === cleanId) || (e.employeeId && e.employeeId.toUpperCase() === cleanId));
+        if (exists) {
+            throw new Error(`Employee ID "${cleanId}" already exists. Each employee must have a unique ID.`);
+        }
+
+        const colors = ["bg-blue-600", "bg-emerald-600", "bg-purple-600", "bg-pink-600", "bg-indigo-600", "bg-amber-600", "bg-teal-600"];
+        const randomBg = colors[Math.floor(Math.random() * colors.length)];
+
         const newEmp = {
-            id: newId,
-            name: empData.name || "New Employee",
-            role: empData.role || "Relationship Manager",
-            department: empData.department || "Sales & Distribution",
-            location: empData.location || "Bangalore",
-            manager: empData.manager || "Amit Kumar",
-            email: empData.email || `${newId.toLowerCase()}@skillup.com`,
-            phone: empData.phone || "+91 98765 00000",
+            id: cleanId,
+            employeeId: cleanId,
+            name: empData.fullName.trim(),
+            fullName: empData.fullName.trim(),
+            email: empData.email.trim().toLowerCase(),
+            phone: empData.mobileNumber ? empData.mobileNumber.trim() : "",
+            mobileNumber: empData.mobileNumber ? empData.mobileNumber.trim() : "",
+            role: empData.role,
+            department: empData.role === "TBM" || empData.role === "ABM" ? "Branch Operations" : (empData.role === "RBH" ? "Regional Leadership" : "Sales & Distribution"),
+            location: empData.location,
+            manager: empData.manager,
+            employmentStatus: empData.employmentStatus || "Active",
+            status: empData.employmentStatus || "Active",
+            skillupAccessEnabled: empData.skillupAccessEnabled !== undefined ? empData.skillupAccessEnabled : true,
             joiningDate: "Today",
             progress: 0,
             coursesAssigned: 0,
             coursesCompleted: 0,
             coursesInProgress: 0,
             avgScore: null,
-            status: "Active",
-            avatarBg: "bg-blue-600",
+            avatarBg: randomBg,
             courseProgress: []
         };
+
         this.employees.unshift(newEmp);
-        this.addActivity(`Added new employee: ${newEmp.name} (${newId})`, "employee", "user-plus", "text-emerald-500");
+        this.addActivity(`Added new employee: ${newEmp.fullName} (${newEmp.employeeId})`, "employee", "user-plus", "text-emerald-500");
+        this.logAudit(this.adminUser.id, newEmp.employeeId, newEmp.fullName, "Employee Created", `Created with Employment Status: ${newEmp.employmentStatus}, SkillUp Access: ${newEmp.skillupAccessEnabled ? 'Enabled' : 'Disabled'}`);
         this.notify();
         return newEmp;
     }
 
-    // Courses
+    bulkImportEmployees(validEmployeesList) {
+        if (!validEmployeesList || validEmployeesList.length === 0) return 0;
+        const colors = ["bg-blue-600", "bg-emerald-600", "bg-purple-600", "bg-pink-600", "bg-indigo-600", "bg-amber-600", "bg-teal-600"];
+        
+        let count = 0;
+        validEmployeesList.forEach(item => {
+            const cleanId = item.employeeId.trim().toUpperCase();
+            const randomBg = colors[Math.floor(Math.random() * colors.length)];
+            const emp = {
+                id: cleanId,
+                employeeId: cleanId,
+                name: item.fullName.trim(),
+                fullName: item.fullName.trim(),
+                email: item.email.trim().toLowerCase(),
+                phone: item.mobileNumber ? item.mobileNumber.trim() : "",
+                mobileNumber: item.mobileNumber ? item.mobileNumber.trim() : "",
+                role: item.role,
+                department: item.role === "TBM" || item.role === "ABM" ? "Branch Operations" : (item.role === "RBH" ? "Regional Leadership" : "Sales & Distribution"),
+                location: item.location,
+                manager: item.manager,
+                employmentStatus: item.employmentStatus || "Active",
+                status: item.employmentStatus || "Active",
+                skillupAccessEnabled: item.skillupAccessEnabled !== undefined ? item.skillupAccessEnabled : true,
+                joiningDate: "Today",
+                progress: 0,
+                coursesAssigned: 0,
+                coursesCompleted: 0,
+                coursesInProgress: 0,
+                avgScore: null,
+                avatarBg: randomBg,
+                courseProgress: []
+            };
+            this.employees.unshift(emp);
+            count++;
+        });
+
+        this.addActivity(`Bulk imported ${count} employees via CSV`, "employee", "upload-cloud", "text-blue-500");
+        this.logAudit(this.adminUser.id, "BULK", `${count} Employees`, "Bulk CSV Import", `Imported ${count} verified employee records`);
+        this.notify();
+        return count;
+    }
+
+    // SkillUp Access Toggling (Data retention strictly guaranteed)
+    setEmployeeSkillUpAccess(employeeId, enabled) {
+        const emp = this.getEmployeeById(employeeId);
+        if (emp) {
+            emp.skillupAccessEnabled = Boolean(enabled);
+            const actionText = enabled ? "SkillUp Access Enabled" : "SkillUp Access Disabled";
+            const detailText = enabled 
+                ? "Restored login access and active learning content access" 
+                : "Suspended portal login rights. All employee records, course progress, quiz results & history retained.";
+            
+            this.addActivity(`${emp.fullName} (${emp.employeeId}): ${actionText}`, "access", enabled ? "shield-check" : "shield-alert", enabled ? "text-emerald-500" : "text-rose-500");
+            this.logAudit(this.adminUser.id, emp.employeeId, emp.fullName, actionText, detailText);
+            this.notify();
+        }
+    }
+
+    bulkSetSkillUpAccess(employeeIds, enabled) {
+        if (!employeeIds || employeeIds.length === 0) return;
+        const actionText = enabled ? "SkillUp Access Enabled" : "SkillUp Access Disabled";
+        
+        employeeIds.forEach(id => {
+            const emp = this.getEmployeeById(id);
+            if (emp) {
+                emp.skillupAccessEnabled = Boolean(enabled);
+                this.logAudit(this.adminUser.id, emp.employeeId, emp.fullName, actionText, `Bulk update (${actionText})`);
+            }
+        });
+
+        this.addActivity(`${actionText} for ${employeeIds.length} employees`, "access", enabled ? "shield-check" : "shield-alert", enabled ? "text-emerald-500" : "text-rose-500");
+        this.selectedEmployeeIds.clear();
+        this.notify();
+    }
+
+    // Course Access Revocation & Restoration (Data retention strictly guaranteed)
+    revokeCourseAccess(employeeId, courseId) {
+        const emp = this.getEmployeeById(employeeId);
+        if (!emp || !emp.courseProgress) return;
+        const cp = emp.courseProgress.find(c => c.courseId === courseId);
+        if (cp) {
+            cp.status = "REVOKED";
+            const now = new Date();
+            const dateStr = `${now.getDate()} ${now.toLocaleString('default', { month: 'short' })} ${now.getFullYear()}`;
+            cp.revokedAt = dateStr;
+            cp.revokedBy = this.adminUser.id;
+
+            this.addActivity(`${emp.fullName}: Revoked access to "${cp.title}"`, "course-access", "slash", "text-rose-500");
+            this.logAudit(this.adminUser.id, emp.employeeId, emp.fullName, `${cp.title} Access Revoked`, `Progress (${cp.progress}%) and quiz history preserved; active learning suspended.`);
+            this.notify();
+        }
+    }
+
+    restoreCourseAccess(employeeId, courseId) {
+        const emp = this.getEmployeeById(employeeId);
+        if (!emp || !emp.courseProgress) return;
+        const cp = emp.courseProgress.find(c => c.courseId === courseId);
+        if (cp) {
+            cp.status = cp.progress > 0 ? (cp.progress >= 100 ? "COMPLETED" : "IN PROGRESS") : "ASSIGNED";
+            cp.revokedAt = null;
+            cp.revokedBy = null;
+
+            this.addActivity(`${emp.fullName}: Restored access to "${cp.title}"`, "course-access", "refresh-cw", "text-emerald-500");
+            this.logAudit(this.adminUser.id, emp.employeeId, emp.fullName, `${cp.title} Access Restored`, `Employee can resume learning from ${cp.progress}% with preserved quiz records.`);
+            this.notify();
+        }
+    }
+
+    // Selection helper
+    toggleSelectEmployee(id) {
+        if (this.selectedEmployeeIds.has(id)) {
+            this.selectedEmployeeIds.delete(id);
+        } else {
+            this.selectedEmployeeIds.add(id);
+        }
+        this.notify();
+    }
+
+    selectAllEmployees(ids) {
+        if (this.selectedEmployeeIds.size === ids.length) {
+            this.selectedEmployeeIds.clear();
+        } else {
+            ids.forEach(id => this.selectedEmployeeIds.add(id));
+        }
+        this.notify();
+    }
+
+    clearEmployeeSelection() {
+        this.selectedEmployeeIds.clear();
+        this.notify();
+    }
+
+    // Course Management
     getCourseById(id) {
         return this.courses.find(c => c.id === id) || this.courses[0];
     }
@@ -277,7 +484,6 @@ class AdminStore {
         }
     }
 
-    // Modules & Lessons in Course Builder
     addModuleToCourse(courseId, title = "New Module") {
         const course = this.getCourseById(courseId);
         if (course) {
@@ -380,7 +586,7 @@ class AdminStore {
         this.notify();
     }
 
-    // Assignments Workflow
+    // Assignments
     createAssignment(assignmentData) {
         const newId = `ASG-00${this.assignments.length + 1}`;
         const newAsg = {
@@ -397,7 +603,6 @@ class AdminStore {
         };
         this.assignments.unshift(newAsg);
 
-        // Also update the course's assignedCount
         const course = this.getCourseById(assignmentData.courseId);
         if (course) {
             course.assignedCount = (course.assignedCount || 0) + newAsg.employeeCount;
@@ -408,7 +613,6 @@ class AdminStore {
         return newAsg;
     }
 
-    // Notification Reminders
     sendReminder(notificationId) {
         const notif = this.notifications.find(n => n.id === notificationId);
         if (notif) {
@@ -418,16 +622,14 @@ class AdminStore {
         }
     }
 
-    // Update Settings
     updateSettings(newSettings) {
         this.settings = Object.assign({}, this.settings, newSettings);
         this.addActivity(`Admin settings updated`, "settings", "settings", "text-slate-500");
         this.notify();
     }
 
-    // Reset data to defaults
     resetToFactoryDefaults() {
-        localStorage.removeItem("skillup_admin_state_v2");
+        localStorage.removeItem("skillup_admin_state_v3");
         this.loadState();
         this.notify();
     }

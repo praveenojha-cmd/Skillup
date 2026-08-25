@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkillUp — Admin Web Portal</title>
+    <title>SkillUp LMS — Rupeek Admin Portal</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -18,31 +18,37 @@
                         sans: ['Plus Jakarta Sans', 'sans-serif'],
                     },
                     colors: {
-                        corporate: {
-                            navy: '#0A2540',
-                            blue: '#2563EB',
-                            bluelight: '#EFF6FF',
+                        rupeek: {
+                            orange: '#F97316',
+                            darkorange: '#EA580C',
+                            navy: '#0B192C',
+                            darknavy: '#071322',
                         }
+                    },
+                    keyframes: {
+                        'slide-up': {
+                            '0%': { transform: 'translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        },
+                        'scale-up': {
+                            '0%': { transform: 'scale(0.95)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' }
+                        }
+                    },
+                    animation: {
+                        'slide-up': 'slide-up 0.25s ease-out',
+                        'scale-up': 'scale-up 0.2s ease-out',
                     }
                 }
             }
         }
     </script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Custom Styles -->
-    <link rel="stylesheet" href="css/styles.css">
 </head>
-<body class="bg-[#F8FAFC] text-slate-900 antialiased font-sans">
-    <!-- Application Root Container -->
+<body class="bg-[#F8FAFC] text-slate-900 antialiased font-sans selection:bg-orange-500 selection:text-white">
+    <!-- React Root Mount -->
     <div id="app-root"></div>
 
-    <!-- Toast Alerts Container -->
-    <div id="toast-container"></div>
-
-    <!-- Scripts -->
-    <script src="js/data.js"></script>
-    <script src="js/store.js"></script>
-    <script src="js/app.js"></script>
+    <!-- React + Supabase JS Bundle -->
+    <script src="js/bundle.js"></script>
 </body>
 </html>

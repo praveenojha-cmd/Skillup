@@ -1,5 +1,6 @@
 // SkillUp Enterprise Admin Portal - Local Sample Data Repository
 // Milestone 2 Prototype Data Models & Realistic Local Store
+// Future Backend Compatible Structure
 
 const INITIAL_ADMIN_USER = {
     id: "ADMIN001",
@@ -14,183 +15,223 @@ const INITIAL_ADMIN_USER = {
 const INITIAL_EMPLOYEES = [
     {
         id: "EMP001",
+        employeeId: "EMP001",
         name: "Rahul Sharma",
+        fullName: "Rahul Sharma",
         role: "Relationship Manager",
         department: "Sales & Distribution",
         location: "Bangalore",
         manager: "Amit Kumar",
         email: "rahul.sharma@skillup.com",
         phone: "+91 98765 43210",
+        mobileNumber: "+91 98765 43210",
         joiningDate: "12 Jan 2024",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 78,
         coursesAssigned: 8,
         coursesCompleted: 5,
         coursesInProgress: 2,
         avgScore: 84,
-        status: "Active",
         avatarBg: "bg-blue-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "In Progress", progress: 65, score: null, lastActivity: "24 Aug 2026", deadline: "30 Sep 2026" },
-            { courseId: "C002", title: "Sales Excellence", status: "Not Started", progress: 0, score: null, lastActivity: "—", deadline: "15 Oct 2026" },
-            { courseId: "C003", title: "Customer Handling Excellence", status: "Completed", progress: 100, score: 88, lastActivity: "20 Aug 2026", deadline: "10 Aug 2026" },
-            { courseId: "C004", title: "Collections & Retention", status: "In Progress", progress: 30, score: 72, lastActivity: "22 Aug 2026", deadline: "25 Sep 2026" },
-            { courseId: "C005", title: "Anti-Money Laundering & KYC", status: "Completed", progress: 100, score: 92, lastActivity: "15 Aug 2026", deadline: "15 Aug 2026" },
-            { courseId: "C006", title: "Information Security & Compliance", status: "Completed", progress: 100, score: 85, lastActivity: "05 Aug 2026", deadline: "10 Aug 2026" },
-            { courseId: "C007", title: "Appraisal & Valuation Standards", status: "Completed", progress: 100, score: 80, lastActivity: "01 Aug 2026", deadline: "05 Aug 2026" },
-            { courseId: "C008", title: "Workplace Ethics & POSH", status: "Completed", progress: 100, score: 90, lastActivity: "28 Jul 2026", deadline: "30 Jul 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "IN PROGRESS", progress: 65, score: null, lastActivity: "24 Aug 2026", deadline: "30 Sep 2026", assignedAt: "10 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C002", title: "Sales Excellence", status: "REVOKED", progress: 30, score: 72, lastActivity: "20 Aug 2026", deadline: "15 Oct 2026", assignedAt: "10 Aug 2026", assignedBy: "ADMIN001", revokedAt: "22 Aug 2026", revokedBy: "ADMIN001" },
+            { courseId: "C003", title: "Customer Handling Excellence", status: "COMPLETED", progress: 100, score: 88, lastActivity: "20 Aug 2026", deadline: "10 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C004", title: "Collections & Retention", status: "IN PROGRESS", progress: 30, score: 72, lastActivity: "22 Aug 2026", deadline: "25 Sep 2026", assignedAt: "15 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C005", title: "Anti-Money Laundering & KYC", status: "COMPLETED", progress: 100, score: 92, lastActivity: "15 Aug 2026", deadline: "15 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C006", title: "Information Security & RBI Compliance", status: "COMPLETED", progress: 100, score: 85, lastActivity: "05 Aug 2026", deadline: "10 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C007", title: "Appraisal & Safe Custody Protocols", status: "COMPLETED", progress: 100, score: 80, lastActivity: "01 Aug 2026", deadline: "05 Aug 2026", assignedAt: "15 Jul 2026", assignedBy: "ADMIN001" },
+            { courseId: "C008", title: "Workplace Ethics & POSH", status: "COMPLETED", progress: 100, score: 90, lastActivity: "28 Jul 2026", deadline: "30 Jul 2026", assignedAt: "10 Jul 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP002",
+        employeeId: "EMP002",
         name: "Amit Kumar",
+        fullName: "Amit Kumar",
         role: "Relationship Manager",
         department: "Sales & Distribution",
         location: "Delhi",
         manager: "Priya Sharma",
         email: "amit.kumar@skillup.com",
         phone: "+91 98765 43211",
+        mobileNumber: "+91 98765 43211",
         joiningDate: "05 Mar 2024",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 64,
         coursesAssigned: 6,
         coursesCompleted: 3,
         coursesInProgress: 2,
         avgScore: 79,
-        status: "Active",
         avatarBg: "bg-emerald-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "Completed", progress: 100, score: 82, lastActivity: "18 Aug 2026", deadline: "20 Aug 2026" },
-            { courseId: "C002", title: "Sales Excellence", status: "In Progress", progress: 45, score: null, lastActivity: "23 Aug 2026", deadline: "15 Sep 2026" },
-            { courseId: "C003", title: "Customer Handling Excellence", status: "In Progress", progress: 50, score: null, lastActivity: "21 Aug 2026", deadline: "30 Sep 2026" },
-            { courseId: "C004", title: "Collections & Retention", status: "Not Started", progress: 0, score: null, lastActivity: "—", deadline: "20 Oct 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "COMPLETED", progress: 100, score: 82, lastActivity: "18 Aug 2026", deadline: "20 Aug 2026", assignedAt: "05 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C002", title: "Sales Excellence", status: "IN PROGRESS", progress: 45, score: null, lastActivity: "23 Aug 2026", deadline: "15 Sep 2026", assignedAt: "10 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C003", title: "Customer Handling Excellence", status: "IN PROGRESS", progress: 50, score: null, lastActivity: "21 Aug 2026", deadline: "30 Sep 2026", assignedAt: "12 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C004", title: "Collections & Retention", status: "ASSIGNED", progress: 0, score: null, lastActivity: "—", deadline: "20 Oct 2026", assignedAt: "18 Aug 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP003",
+        employeeId: "EMP003",
         name: "Neha Singh",
+        fullName: "Neha Singh",
         role: "TBM",
         department: "Branch Operations",
         location: "Mumbai",
         manager: "Raj Kumar",
         email: "neha.singh@skillup.com",
         phone: "+91 98765 43212",
+        mobileNumber: "+91 98765 43212",
         joiningDate: "18 Nov 2023",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 91,
         coursesAssigned: 10,
         coursesCompleted: 9,
         coursesInProgress: 1,
         avgScore: 92,
-        status: "Active",
         avatarBg: "bg-purple-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "Completed", progress: 100, score: 94, lastActivity: "14 Aug 2026", deadline: "15 Aug 2026" },
-            { courseId: "C002", title: "Sales Excellence", status: "Completed", progress: 100, score: 90, lastActivity: "19 Aug 2026", deadline: "20 Aug 2026" },
-            { courseId: "C003", title: "Customer Handling Excellence", status: "Completed", progress: 100, score: 96, lastActivity: "21 Aug 2026", deadline: "22 Aug 2026" },
-            { courseId: "C004", title: "Collections & Retention", status: "In Progress", progress: 80, score: null, lastActivity: "24 Aug 2026", deadline: "01 Sep 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "COMPLETED", progress: 100, score: 94, lastActivity: "14 Aug 2026", deadline: "15 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C002", title: "Sales Excellence", status: "COMPLETED", progress: 100, score: 90, lastActivity: "19 Aug 2026", deadline: "20 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C003", title: "Customer Handling Excellence", status: "COMPLETED", progress: 100, score: 96, lastActivity: "21 Aug 2026", deadline: "22 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" },
+            { courseId: "C004", title: "Collections & Retention", status: "IN PROGRESS", progress: 80, score: null, lastActivity: "24 Aug 2026", deadline: "01 Sep 2026", assignedAt: "10 Aug 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP004",
+        employeeId: "EMP004",
         name: "Priya Sharma",
+        fullName: "Priya Sharma",
         role: "ABM",
         department: "Branch Operations",
         location: "Delhi",
         manager: "Raj Kumar",
         email: "priya.sharma@skillup.com",
         phone: "+91 98765 43213",
+        mobileNumber: "+91 98765 43213",
         joiningDate: "10 Feb 2023",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 88,
         coursesAssigned: 8,
         coursesCompleted: 7,
         coursesInProgress: 1,
         avgScore: 89,
-        status: "Active",
         avatarBg: "bg-pink-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "Completed", progress: 100, score: 91, lastActivity: "10 Aug 2026", deadline: "15 Aug 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "COMPLETED", progress: 100, score: 91, lastActivity: "10 Aug 2026", deadline: "15 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP005",
+        employeeId: "EMP005",
         name: "Raj Kumar",
+        fullName: "Raj Kumar",
         role: "RBH",
         department: "Regional Leadership",
         location: "Mumbai",
         manager: "Executive Board",
         email: "raj.kumar@skillup.com",
         phone: "+91 98765 43214",
+        mobileNumber: "+91 98765 43214",
         joiningDate: "15 Jan 2022",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 95,
         coursesAssigned: 12,
         coursesCompleted: 11,
         coursesInProgress: 1,
         avgScore: 94,
-        status: "Active",
         avatarBg: "bg-indigo-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "Completed", progress: 100, score: 98, lastActivity: "08 Aug 2026", deadline: "10 Aug 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "COMPLETED", progress: 100, score: 98, lastActivity: "08 Aug 2026", deadline: "10 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP006",
+        employeeId: "EMP006",
         name: "Sneha Reddy",
+        fullName: "Sneha Reddy",
         role: "Relationship Manager",
         department: "Sales & Distribution",
         location: "Hyderabad",
         manager: "Vikram Patel",
         email: "sneha.reddy@skillup.com",
         phone: "+91 98765 43215",
+        mobileNumber: "+91 98765 43215",
         joiningDate: "01 Jun 2024",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 52,
         coursesAssigned: 6,
         coursesCompleted: 2,
         coursesInProgress: 3,
         avgScore: 76,
-        status: "Active",
         avatarBg: "bg-amber-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "In Progress", progress: 70, score: null, lastActivity: "22 Aug 2026", deadline: "15 Sep 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "IN PROGRESS", progress: 70, score: null, lastActivity: "22 Aug 2026", deadline: "15 Sep 2026", assignedAt: "10 Aug 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP007",
+        employeeId: "EMP007",
         name: "Vikram Patel",
+        fullName: "Vikram Patel",
         role: "TBM",
         department: "Branch Operations",
         location: "Hyderabad",
         manager: "Raj Kumar",
         email: "vikram.patel@skillup.com",
         phone: "+91 98765 43216",
+        mobileNumber: "+91 98765 43216",
         joiningDate: "20 Sep 2023",
+        employmentStatus: "Active",
+        status: "Active",
+        skillupAccessEnabled: true,
         progress: 83,
         coursesAssigned: 9,
         coursesCompleted: 7,
         coursesInProgress: 1,
         avgScore: 85,
-        status: "Active",
         avatarBg: "bg-teal-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "Completed", progress: 100, score: 87, lastActivity: "12 Aug 2026", deadline: "15 Aug 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "COMPLETED", progress: 100, score: 87, lastActivity: "12 Aug 2026", deadline: "15 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" }
         ]
     },
     {
         id: "EMP008",
+        employeeId: "EMP008",
         name: "Ananya Roy",
+        fullName: "Ananya Roy",
         role: "Relationship Manager",
         department: "Sales & Distribution",
         location: "Bangalore",
         manager: "Amit Kumar",
         email: "ananya.roy@skillup.com",
         phone: "+91 98765 43217",
+        mobileNumber: "+91 98765 43217",
         joiningDate: "14 Jul 2024",
+        employmentStatus: "Inactive",
+        status: "Inactive",
+        skillupAccessEnabled: false,
         progress: 35,
         coursesAssigned: 5,
         coursesCompleted: 1,
         coursesInProgress: 2,
         avgScore: 68,
-        status: "Inactive",
         avatarBg: "bg-slate-600",
         courseProgress: [
-            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "In Progress", progress: 40, score: null, lastActivity: "10 Aug 2026", deadline: "15 Aug 2026" }
+            { courseId: "C001", title: "Gold Loan Product Knowledge", status: "IN PROGRESS", progress: 40, score: null, lastActivity: "10 Aug 2026", deadline: "15 Aug 2026", assignedAt: "01 Aug 2026", assignedBy: "ADMIN001" }
         ]
     }
 ];
@@ -520,7 +561,7 @@ const INITIAL_ASSIGNMENTS = [
     {
         id: "ASG-004",
         courseId: "C005",
-        courseTitle: "Information Security & Compliance",
+        courseTitle: "Information Security & RBI Compliance",
         assignedToLabel: "All 200 Employees (Company-Wide)",
         targetType: "All Employees",
         employeeCount: 200,
@@ -570,4 +611,37 @@ const INITIAL_ACTIVITIES = [
     { id: "ACT-03", text: "Neha Singh completed Customer Handling Excellence (Score 96%)", time: "1 hour ago", type: "completion", icon: "award", color: "text-emerald-500" },
     { id: "ACT-04", text: "Admin assigned Collections & Retention to 25 employees", time: "3 hours ago", type: "assignment", icon: "send", color: "text-indigo-500" },
     { id: "ACT-05", text: "Sneha Reddy scored 88% on Valuation Karat Assessment", time: "4 hours ago", type: "quiz", icon: "file-text", color: "text-amber-500" }
+];
+
+const INITIAL_AUDIT_LOGS = [
+    {
+        id: "AUD-01",
+        date: "24 Aug 2026",
+        timestamp: "24 Aug 2026, 04:15 PM",
+        adminId: "ADMIN001",
+        employeeId: "EMP001",
+        employeeName: "Rahul Sharma",
+        action: "SkillUp Access Enabled",
+        details: "Confirmed active employee portal login rights"
+    },
+    {
+        id: "AUD-02",
+        date: "22 Aug 2026",
+        timestamp: "22 Aug 2026, 11:40 AM",
+        adminId: "ADMIN001",
+        employeeId: "EMP001",
+        employeeName: "Rahul Sharma",
+        action: "Sales Excellence Access Revoked",
+        details: "Course curriculum access suspended; historic progress preserved at 30%"
+    },
+    {
+        id: "AUD-03",
+        date: "15 Aug 2026",
+        timestamp: "15 Aug 2026, 09:20 AM",
+        adminId: "ADMIN001",
+        employeeId: "EMP008",
+        employeeName: "Ananya Roy",
+        action: "SkillUp Access Disabled",
+        details: "Employee separated/inactive; all learning records and quiz scores retained"
+    }
 ];
