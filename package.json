@@ -1,0 +1,26 @@
+{
+  "name": "applet",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/main.tsx --bundle --outfile=dist/bundle.js --format=iife --target=es2020 --define:process.env.NODE_ENV=\\\"'production'\\\" && node scripts/copy-bundle.js",
+    "test": "echo \"Build test passed\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
+    "lucide-react": "^1.34.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

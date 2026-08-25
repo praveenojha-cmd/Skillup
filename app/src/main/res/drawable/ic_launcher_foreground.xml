@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Main Graduation Cap & Star of Excellence -->
+    <!-- Cap top diamond -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 L84,40 L54,52 L24,40 Z" />
+    <!-- Cap body / lower rim -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M34,44.5 L34,58 C34,65.7 43,71 54,71 C65,71 74,65.7 74,58 L74,44.5 L54,52.5 Z" />
+    <!-- Tassel and tassel drop -->
+    <path
+        android:fillColor="#60A5FA"
+        android:pathData="M78,41 L80,41 L82,60 C80.5,61 80,63.5 80,66 C80,68.5 80.5,70 82,71 L78,71 C79.5,70 80,68.5 80,66 C80,63.5 79.5,61 78,60 Z" />
+    <!-- Spark / upward growth chevron -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,77 L62,85 L58,85 L54,81 L50,85 L46,85 Z" />
+</vector>
+
