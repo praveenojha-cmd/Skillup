@@ -4,36 +4,38 @@ import { useToast } from '../context/ToastContext';
 import { SupabaseConfigModal } from '../components/settings/SupabaseConfigModal';
 
 interface LoginPageProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (portal?: 'ADMIN' | 'EMPLOYEE') => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('praveen.ojha@rupeek.com');
-  const [password, setPassword] = useState('admin1234');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const { login, isLoading, error } = useAuth();
+  const [targetPortal, setTargetPortal] = useState<'AUTO' | 'EMPLOYEE' | 'ADMIN'>('AUTO');
+  const { login, isLoading, error, accessDeniedReason } = useAuth();
   const { showSuccess, showError } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      showError('Please enter your official administrator email.');
+    if (!email.trim()) {
+      showError('Please enter your official Rupeek email.');
+      return;
+    }
+    if (!password) {
+      showError('Please enter your account password.');
       return;
     }
 
-    const res = await login(email, password);
+    const preferred = targetPortal === 'AUTO' ? undefined : targetPortal;
+    const res = await login(email, password, preferred);
     if (res.success) {
-      showSuccess(`Welcome back! Authenticated as ${email}`, 'Admin Authorized');
-      onLoginSuccess();
+      const portalType = res.portal || 'EMPLOYEE';
+      showSuccess(`Welcome back! Authenticated as ${email}`, portalType === 'ADMIN' ? 'Admin Authorized' : 'Learner Portal Ready');
+      onLoginSuccess(portalType);
     } else {
       showError(res.error || 'Authentication failed. Please verify credentials.', 'Access Denied');
     }
-  };
-
-  const handleQuickFill = (adminEmail: string) => {
-    setEmail(adminEmail);
-    setPassword('admin1234');
   };
 
   return (
@@ -68,24 +70,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </h2>
         <div className="flex items-center justify-center gap-2 mt-1">
           <span className="text-xs font-bold text-orange-400 uppercase tracking-widest bg-orange-950/50 px-2 py-0.5 rounded border border-orange-800/60">
-            RUPEEK INTERNAL PLATFORM
+            RUPEEK LEARNING PLATFORM
           </span>
-          <span className="text-xs text-slate-400">&bull; Admin Portal</span>
+          <span className="text-xs text-slate-400">&bull; Enterprise Portal</span>
         </div>
         <p className="mt-2 text-xs text-slate-400 max-w-sm mx-auto">
-          Authorized access only. All sessions and actions are cryptographically verified and recorded in the audit log.
+          Sign in with your official Rupeek credentials to access assigned courses, learning modules, quizzes, and LMS tools.
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <div className="bg-[#0B192C] py-8 px-6 sm:px-8 shadow-2xl rounded-3xl border border-slate-800/90 backdrop-blur-xl relative">
           {/* Error Banner */}
-          {error && (
+          {(error || accessDeniedReason) && (
             <div className="mb-5 p-3.5 rounded-xl bg-rose-950/80 border border-rose-700/50 text-rose-200 text-xs flex items-start gap-2.5">
               <svg className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <div className="font-medium">{error}</div>
+              <div className="font-medium leading-relaxed">{accessDeniedReason || error}</div>
             </div>
           )}
 
@@ -105,7 +107,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@rupeek.com"
+                  placeholder="employee.name@rupeek.com"
                   className="w-full pl-10 pr-3.5 py-2.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-xs"
                 />
               </div>
@@ -135,7 +137,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Enter account password"
                   className="w-full pl-10 pr-3.5 py-2.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-xs"
                 />
               </div>
@@ -157,7 +159,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   </>
                 ) : (
                   <>
-                    <span>Sign In to LMS Admin</span>
+                    <span>Sign In to SkillUp</span>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                     </svg>
@@ -166,26 +168,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </button>
             </div>
           </form>
-
-          {/* Preset Admin Quick-Fill */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center">
-              Existing Super Admin
-            </div>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('praveen.ojha@rupeek.com')}
-              className="w-full p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-left transition flex items-center justify-between"
-            >
-              <div>
-                <div className="text-xs font-bold text-white">Praveen Ojha</div>
-                <div className="text-[11px] text-slate-400 font-mono">praveen.ojha@rupeek.com</div>
-              </div>
-              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-orange-950/80 text-orange-400 border border-orange-800/50">
-                SUPER_ADMIN
-              </span>
-            </button>
-          </div>
         </div>
       </div>
 

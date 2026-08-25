@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { StatCard } from '../components/common/StatCard';
 import { Badge } from '../components/common/Badge';
-import { fetchDashboardStats, fetchLocations, fetchRoles } from '../lib/supabase';
-import { DashboardStats, Location, Role } from '../types/database';
+import { 
+  fetchDashboardStats, 
+  fetchLocations, 
+  fetchRoles, 
+  fetchLiveCityDistribution, 
+  fetchLiveDesignationDistribution 
+} from '../lib/supabase';
+import { DashboardStats, Location, Role, LocationDistribution, RoleDistribution } from '../types/database';
 import { AppRoute } from '../types/auth';
 
 interface DashboardPageProps {
@@ -13,25 +19,36 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [cityDist, setCityDist] = useState<LocationDistribution[]>([]);
+  const [roleDist, setRoleDist] = useState<RoleDistribution[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     async function loadData() {
       setIsLoading(true);
+      setError(null);
       try {
-        const [statsData, locData, rolesData] = await Promise.all([
+        const [statsData, locData, rolesData, cityData, roleData] = await Promise.all([
           fetchDashboardStats(),
           fetchLocations(),
-          fetchRoles()
+          fetchRoles(),
+          fetchLiveCityDistribution(),
+          fetchLiveDesignationDistribution()
         ]);
         if (isMounted) {
           setStats(statsData);
           setLocations(locData);
           setRoles(rolesData);
+          setCityDist(cityData);
+          setRoleDist(roleData);
         }
-      } catch (err) {
-        console.error('Error loading dashboard stats:', err);
+      } catch (err: any) {
+        console.error('Error loading live dashboard metrics from Supabase:', err);
+        if (isMounted) {
+          setError(err?.message || 'Failed to load real-time metrics from Supabase.');
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -39,6 +56,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     loadData();
     return () => { isMounted = false; };
   }, []);
+
+  const totalEmployeesCount = stats ? stats.totalEmployees : 0;
+  const activeEmployeesCount = stats ? stats.activeEmployees : 0;
+  const skillUpEnabledCount = stats ? stats.skillUpEnabled : 0;
+  const skillUpDisabledCount = stats ? stats.skillUpDisabled : 0;
+  const totalCoursesCount = stats ? stats.totalCourses : 0;
+  const assignedCoursesCount = stats ? stats.assignedCourses : 0;
+  const completionRateVal = stats ? stats.completionRate : 0;
+
+  const activePct = totalEmployeesCount > 0 
+    ? `${Math.round((activeEmployeesCount / totalEmployeesCount) * 100)}%` 
+    : '0%';
+
+  const colorPalette = ['bg-orange-500', 'bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500'];
 
   return (
     <div className="space-y-6 animate-fade-in font-sans">
@@ -56,7 +87,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
               SkillUp LMS Executive Dashboard
             </h2>
             <p className="text-slate-300 text-xs sm:text-sm mt-1.5 leading-relaxed">
-              Real-time synchronization with Supabase PostgreSQL database. Monitoring 813 business employees across 26 operating locations.
+              Real-time synchronization with Supabase PostgreSQL database. Monitoring {totalEmployeesCount > 0 ? `${totalEmployeesCount} business employees` : 'employees'} across {locations.length > 0 ? `${locations.length} operating locations` : 'operating locations'}.
             </p>
           </div>
 
@@ -74,12 +105,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
         </div>
       </div>
 
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-3 py-1 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 transition"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Employees"
-          value={stats?.totalEmployees || 813}
-          subtitle="Registered in employee master"
+          value={totalEmployeesCount}
+          subtitle="Registered in public.employees"
           accentColor="navy"
           loading={isLoading}
           icon={
@@ -91,9 +139,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
         <StatCard
           title="Active Employees"
-          value={stats?.activeEmployees || 785}
-          subtitle="Currently active headcount"
-          change={stats ? `${Math.round((stats.activeEmployees / stats.totalEmployees) * 100)}%` : '96.5%'}
+          value={activeEmployeesCount}
+          subtitle="employment_status = 'ACTIVE'"
+          change={activePct}
           isPositive={true}
           accentColor="emerald"
           loading={isLoading}
@@ -106,9 +154,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
         <StatCard
           title="SkillUp Enabled"
-          value={stats?.skillUpEnabled || 792}
-          subtitle="Active learning platform access"
-          change="Enabled"
+          value={skillUpEnabledCount}
+          subtitle="skillup_access = 'ENABLED'"
+          change="Access Active"
           isPositive={true}
           accentColor="blue"
           loading={isLoading}
@@ -121,8 +169,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
         <StatCard
           title="SkillUp Disabled"
-          value={stats?.skillUpDisabled || 21}
-          subtitle="Access restricted / on-hold"
+          value={skillUpDisabledCount}
+          subtitle="skillup_access = 'DISABLED'"
           accentColor="rose"
           loading={isLoading}
           icon={
@@ -137,8 +185,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           title="Total Courses"
-          value={stats?.totalCourses || 12}
-          subtitle="Gold Loan, Sales & Compliance"
+          value={totalCoursesCount}
+          subtitle={totalCoursesCount > 0 ? "Published curricula" : "No courses published in database yet"}
           accentColor="orange"
           loading={isLoading}
           icon={
@@ -150,8 +198,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
         <StatCard
           title="Assigned Enrollments"
-          value={stats?.assignedCourses || 1420}
-          subtitle="Active curriculum tracks"
+          value={assignedCoursesCount}
+          subtitle={assignedCoursesCount > 0 ? "Active employee assignments" : "No assignments created yet"}
           accentColor="blue"
           loading={isLoading}
           icon={
@@ -163,10 +211,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
         <StatCard
           title="Completion Rate"
-          value={`${stats?.completionRate || 78}%`}
-          subtitle="Organization completion ratio"
-          change="+4.2%"
-          isPositive={true}
+          value={assignedCoursesCount > 0 ? `${completionRateVal}%` : '0%'}
+          subtitle={assignedCoursesCount > 0 ? "Organization completion ratio" : "No assignments to complete yet"}
           accentColor="emerald"
           loading={isLoading}
           icon={
@@ -184,40 +230,49 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                Operating Locations (26 Cities)
+                Operating Locations {locations.length > 0 ? `(${locations.length} Locations)` : ''}
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">Top employee distribution across business regions</p>
+              <p className="text-xs text-slate-500 mt-0.5">Live headcount distribution from Supabase</p>
             </div>
             <button
               onClick={() => onNavigate('/admin/employees')}
               className="text-xs font-bold text-orange-600 hover:text-orange-700 transition"
             >
-              View Filtered &rarr;
+              View Directory &rarr;
             </button>
           </div>
 
-          <div className="space-y-3">
-            {[
-              { name: 'Bangalore (HQ & South Hub)', count: 245, pct: 30, color: 'bg-orange-500' },
-              { name: 'Mumbai (West Hub)', count: 180, pct: 22, color: 'bg-blue-500' },
-              { name: 'Delhi NCR (North Hub)', count: 154, pct: 19, color: 'bg-emerald-500' },
-              { name: 'Hyderabad (Deccan Region)', count: 112, pct: 14, color: 'bg-purple-500' },
-              { name: 'Chennai & Other Tier-2 Cities (22 locations)', count: 122, pct: 15, color: 'bg-slate-400' },
-            ].map((item, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">{item.name}</span>
-                  <span className="font-bold text-slate-900">{item.count} employees ({item.pct}%)</span>
+          {isLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[1, 2, 3, 4, 5].map(n => (
+                <div key={n} className="space-y-1">
+                  <div className="h-3 bg-slate-100 rounded w-1/3" />
+                  <div className="h-2 bg-slate-100 rounded-full w-full" />
                 </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
-                    style={{ width: `${item.pct}%` }}
-                  />
+              ))}
+            </div>
+          ) : cityDist.length > 0 ? (
+            <div className="space-y-3">
+              {cityDist.slice(0, 6).map((item, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">{item.location_name}</span>
+                    <span className="font-bold text-slate-900">{item.count} employees ({item.percentage}%)</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${colorPalette[idx % colorPalette.length]} rounded-full transition-all duration-500`}
+                      style={{ width: `${Math.min(100, Math.max(2, item.percentage))}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-slate-400">
+              No location data found in Supabase.
+            </div>
+          )}
         </div>
 
         {/* Designation Hierarchy Distribution */}
@@ -225,9 +280,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                Business Designations (15 Roles)
+                Business Roles {roles.length > 0 ? `(${roles.length} Roles)` : ''}
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">Learning curriculum target roles and headcount</p>
+              <p className="text-xs text-slate-500 mt-0.5">Live role headcount distribution from Supabase</p>
             </div>
             <button
               onClick={() => onNavigate('/admin/employees')}
@@ -237,30 +292,40 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
             </button>
           </div>
 
-          <div className="space-y-3">
-            {[
-              { name: 'Relationship Manager (RM)', count: 420, pct: 52, color: 'bg-orange-500' },
-              { name: 'Territory Branch Manager (TBM)', count: 195, pct: 24, color: 'bg-blue-500' },
-              { name: 'Area Branch Manager (ABM)', count: 110, pct: 13, color: 'bg-emerald-500' },
-              { name: 'Regional Business Head (RBH)', count: 48, pct: 6, color: 'bg-amber-500' },
-              { name: 'Quality & Field Appraisers', count: 40, pct: 5, color: 'bg-purple-500' },
-            ].map((item, idx) => (
-              <div key={idx} className="space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700">{item.name}</span>
-                  <span className="font-bold text-slate-900">{item.count} employees ({item.pct}%)</span>
+          {isLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[1, 2, 3, 4, 5].map(n => (
+                <div key={n} className="space-y-1">
+                  <div className="h-3 bg-slate-100 rounded w-1/3" />
+                  <div className="h-2 bg-slate-100 rounded-full w-full" />
                 </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${item.color} rounded-full transition-all duration-500`}
-                    style={{ width: `${item.pct}%` }}
-                  />
+              ))}
+            </div>
+          ) : roleDist.length > 0 ? (
+            <div className="space-y-3">
+              {roleDist.slice(0, 6).map((item, idx) => (
+                <div key={idx} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">{item.role_name}</span>
+                    <span className="font-bold text-slate-900">{item.count} employees ({item.percentage}%)</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${colorPalette[idx % colorPalette.length]} rounded-full transition-all duration-500`}
+                      style={{ width: `${Math.min(100, Math.max(2, item.percentage))}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-xs text-slate-400">
+              No role data found in Supabase.
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
+

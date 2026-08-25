@@ -2,28 +2,51 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { AdminLayout } from './components/layout/AdminLayout';
+import { LearnerLayout } from './components/layout/LearnerLayout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeesPage } from './pages/EmployeesPage';
+import { CoursesPage } from './pages/CoursesPage';
+import { AssignmentsPage } from './pages/AssignmentsPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
+
+// Learner Portal Pages (Phase 2D)
+import { LearnerDashboardPage } from './pages/learner/LearnerDashboardPage';
+import { LearnerCoursesPage } from './pages/learner/LearnerCoursesPage';
+import { LearnerCourseViewPage } from './pages/learner/LearnerCourseViewPage';
+import { LearnerCurriculumPlayerPage } from './pages/learner/LearnerCurriculumPlayerPage';
+import { LearnerHistoryPage } from './pages/learner/LearnerHistoryPage';
+import { LearnerProfilePage } from './pages/learner/LearnerProfilePage';
+
 import { AppRoute } from './types/auth';
 
 const MainRouter: React.FC = () => {
-  const { isAuthenticated, isLoading, isSuperAdmin } = useAuth();
+  const { isAuthenticated, isLoading, isSuperAdmin, activePortal, setActivePortal, employeeProfile, adminProfile } = useAuth();
   
   // URL Hash or state-based routing
-  const getInitialRoute = (): AppRoute => {
+  const getInitialRoute = (): string => {
     if (typeof window !== 'undefined') {
       const path = window.location.hash.replace('#', '') || window.location.pathname;
-      if (['/admin/dashboard', '/admin/employees', '/admin/courses', '/admin/assignments', '/admin/reports', '/admin/admins'].includes(path)) {
-        return path as AppRoute;
+      if (path && path !== '/' && path !== '') {
+        return path;
       }
     }
-    return '/admin/dashboard';
+    return activePortal === 'ADMIN' ? '/admin/dashboard' : '/learn/dashboard';
   };
 
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>(getInitialRoute);
+  const [currentRoute, setCurrentRoute] = useState<string>(getInitialRoute);
   const [globalSearch, setGlobalSearch] = useState<string>('');
+
+  // Keep route synced with active portal
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (activePortal === 'EMPLOYEE' && currentRoute.startsWith('/admin')) {
+        setCurrentRoute('/learn/dashboard');
+      } else if (activePortal === 'ADMIN' && currentRoute.startsWith('/learn')) {
+        // user may stay or route as desired
+      }
+    }
+  }, [activePortal, isAuthenticated]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -31,7 +54,7 @@ const MainRouter: React.FC = () => {
     }
   }, [currentRoute]);
 
-  const handleNavigate = (route: AppRoute) => {
+  const handleNavigate = (route: string) => {
     setCurrentRoute(route);
   };
 
@@ -49,7 +72,7 @@ const MainRouter: React.FC = () => {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            <span>Verifying Admin Authorization...</span>
+            <span>Verifying Authorization &amp; Access Roles...</span>
           </div>
         </div>
       </div>
@@ -60,12 +83,64 @@ const MainRouter: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <LoginPage
-        onLoginSuccess={() => setCurrentRoute('/admin/dashboard')}
+        onLoginSuccess={(portal) => {
+          if (portal === 'ADMIN') {
+            setCurrentRoute('/admin/dashboard');
+          } else {
+            setCurrentRoute('/learn/dashboard');
+          }
+        }}
       />
     );
   }
 
-  // Determine title and subtitle per route
+  // Route matches for LEARNER PORTAL
+  const isLearnerRoute = currentRoute.startsWith('/learn') || activePortal === 'EMPLOYEE';
+
+  if (isLearnerRoute && activePortal === 'EMPLOYEE') {
+    // Check dynamic course views
+    // 1. /learn/courses/:courseId/curriculum
+    if (currentRoute.includes('/curriculum')) {
+      const match = currentRoute.match(/\/learn\/courses\/([^/]+)\/curriculum/);
+      const courseId = match ? match[1] : '';
+      return (
+        <LearnerLayout currentPath={currentRoute} onNavigate={handleNavigate}>
+          <LearnerCurriculumPlayerPage courseId={courseId} onNavigate={handleNavigate} />
+        </LearnerLayout>
+      );
+    }
+
+    // 2. /learn/courses/:courseId
+    if (currentRoute.startsWith('/learn/courses/') && currentRoute !== '/learn/courses') {
+      const match = currentRoute.match(/\/learn\/courses\/([^/]+)/);
+      const courseId = match ? match[1] : '';
+      return (
+        <LearnerLayout currentPath={currentRoute} onNavigate={handleNavigate}>
+          <LearnerCourseViewPage courseId={courseId} onNavigate={handleNavigate} />
+        </LearnerLayout>
+      );
+    }
+
+    // 3. Static Learner Routes
+    return (
+      <LearnerLayout currentPath={currentRoute} onNavigate={handleNavigate}>
+        {currentRoute === '/learn/courses' && (
+          <LearnerCoursesPage onNavigate={handleNavigate} />
+        )}
+        {currentRoute === '/learn/history' && (
+          <LearnerHistoryPage onNavigate={handleNavigate} />
+        )}
+        {currentRoute === '/learn/profile' && (
+          <LearnerProfilePage onNavigate={handleNavigate} />
+        )}
+        {(currentRoute === '/learn/dashboard' || currentRoute === '/learn' || !currentRoute.startsWith('/learn/')) && (
+          <LearnerDashboardPage onNavigate={handleNavigate} />
+        )}
+      </LearnerLayout>
+    );
+  }
+
+  // Otherwise, render ADMIN PORTAL
   const getPageInfo = () => {
     switch (currentRoute) {
       case '/admin/dashboard':
@@ -110,15 +185,15 @@ const MainRouter: React.FC = () => {
 
   return (
     <AdminLayout
-      currentRoute={currentRoute}
-      onNavigate={handleNavigate}
+      currentRoute={currentRoute as AppRoute}
+      onNavigate={(r) => handleNavigate(r)}
       title={title}
       subtitle={subtitle}
       onSearchChange={currentRoute === '/admin/employees' ? setGlobalSearch : undefined}
       searchValue={globalSearch}
     >
       {currentRoute === '/admin/dashboard' && (
-        <DashboardPage onNavigate={handleNavigate} />
+        <DashboardPage onNavigate={(r) => handleNavigate(r)} />
       )}
 
       {currentRoute === '/admin/employees' && (
@@ -126,45 +201,11 @@ const MainRouter: React.FC = () => {
       )}
 
       {currentRoute === '/admin/courses' && (
-        <PlaceholderPage
-          title="Course Management System"
-          subtitle="Full curriculum management module with course authoring, modules, lessons, and quiz builders."
-          moduleName="courses"
-          icon={
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-          }
-          tables={['courses', 'modules', 'lessons', 'quizzes', 'quiz_questions', 'quiz_options']}
-          features={[
-            'Create, edit, and organize multi-module course curricula',
-            'Rich lesson content with video, markdown, and appraisal guides',
-            'Interactive evaluation quizzes with passing threshold criteria',
-            'Course activation and deactivation controls'
-          ]}
-          onNavigate={handleNavigate}
-        />
+        <CoursesPage />
       )}
 
       {currentRoute === '/admin/assignments' && (
-        <PlaceholderPage
-          title="Course Assignment Engine"
-          subtitle="Assign mandatory and elective learning paths to individuals, operating locations, and roles."
-          moduleName="assignments"
-          icon={
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          }
-          tables={['course_assignments', 'course_completions', 'lesson_progress']}
-          features={[
-            'Individual employee assignment with target completion deadlines',
-            'Bulk cohort assignments by City/Branch or Designation/Role',
-            'Real-time progression tracking and automated reminders',
-            'Assignment status tracking (Not Started, In Progress, Completed, Overdue)'
-          ]}
-          onNavigate={handleNavigate}
-        />
+        <AssignmentsPage />
       )}
 
       {currentRoute === '/admin/reports' && (
@@ -184,7 +225,7 @@ const MainRouter: React.FC = () => {
             'Automated compliance export reports for L&D leadership',
             'Complete audit log trail for governance'
           ]}
-          onNavigate={handleNavigate}
+          onNavigate={(r) => handleNavigate(r)}
         />
       )}
 
@@ -206,7 +247,7 @@ const MainRouter: React.FC = () => {
               'Enable or disable administrator accounts',
               'Super Admin exclusive management boundary protected by private.is_admin()'
             ]}
-            onNavigate={handleNavigate}
+            onNavigate={(r) => handleNavigate(r)}
           />
         ) : (
           <div className="p-8 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2">

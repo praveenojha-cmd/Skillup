@@ -1,21 +1,41 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Employee, EmployeeFilters, EmploymentStatus, SkillUpAccess } from '../types/database';
-import { fetchEmployees, fetchLocations, fetchRoles } from '../lib/supabase';
+import { Employee, EmployeeFilters, Location, Role, EmployeeLearningActivity, SkillUpAccess } from '../types/database';
+import { fetchEmployees, fetchLocations, fetchRoles, fetchEmployeeLearningActivity } from '../lib/supabase';
 import { Badge } from '../components/common/Badge';
 import { Pagination } from '../components/common/Pagination';
 import { Modal } from '../components/common/Modal';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+import { AddEmployeeModal } from '../components/employee/AddEmployeeModal';
+import { EditEmployeeModal } from '../components/employee/EditEmployeeModal';
+import { AccessToggleModal } from '../components/employee/AccessToggleModal';
+import { BulkImportModal } from '../components/employee/BulkImportModal';
 
 interface EmployeesPageProps {
   initialSearch?: string;
 }
 
 export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = '' }) => {
+  const { canManageEmployees, canManageAccess } = useAuth();
+  const { showInfo, showSuccess, showError } = useToast();
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  
+  // Modals state
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const { showInfo } = useToast();
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [togglingState, setTogglingState] = useState<{ employee: Employee; targetAccess: SkillUpAccess } | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState<boolean>(false);
+
+  // Learning activity for selected employee
+  const [learningActivity, setLearningActivity] = useState<EmployeeLearningActivity | null>(null);
+  const [isLoadingActivity, setIsLoadingActivity] = useState<boolean>(false);
 
   // Filters state
   const [filters, setFilters] = useState<EmployeeFilters>({
@@ -28,66 +48,39 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
     pageSize: 10
   });
 
-  // Unique lists of locations and roles for filter select boxes
-  const locationsList = [
-    'Bangalore', 'Mumbai', 'Delhi NCR', 'Hyderabad', 'Chennai', 'Pune',
-    'Kolkata', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Indore', 'Chandigarh',
-    'Kochi', 'Coimbatore', 'Surat', 'Nagpur', 'Bhopal', 'Visakhapatnam',
-    'Patna', 'Vadodara', 'Ghaziabad', 'Ludhiana', 'Agra', 'Nashik',
-    'Faridabad', 'Meerut'
-  ];
-
-  const rolesList = [
-    'Relationship Manager',
-    'Territory Branch Manager (TBM)',
-    'Area Branch Manager (ABM)',
-    'Regional Business Head (RBH)',
-    'Quality & Appraisal Officer',
-    'Loan Verification Specialist',
-    'Gold Valuation Expert',
-    'Customer Experience Lead',
-    'Risk & Audit Officer',
-    'Collections Specialist',
-    'Branch Operations Lead',
-    'Sales Team Lead',
-    'Regional Training Manager',
-    'Compliance Specialist',
-    'Business Development Associate'
-  ];
+  // Fetch filter dropdown options dynamically from Supabase
+  useEffect(() => {
+    let isMounted = true;
+    async function loadFilterOptions() {
+      try {
+        const [locs, rls] = await Promise.all([
+          fetchLocations(),
+          fetchRoles()
+        ]);
+        if (isMounted) {
+          setLocations(locs);
+          setRoles(rls);
+        }
+      } catch (err) {
+        console.error('Error fetching filter options:', err);
+      }
+    }
+    loadFilterOptions();
+    return () => { isMounted = false; };
+  }, []);
 
   const loadEmployees = useCallback(async () => {
     setIsLoading(true);
+    setQueryError(null);
     try {
       const result = await fetchEmployees(filters);
       setEmployees(result.employees);
       setTotalCount(result.totalCount);
     } catch (err: any) {
-      console.error('Error fetching employees:', err);
-      // Fallback sample data generator matching the 813 employees schema if Supabase is initializing
-      const sampleList: Employee[] = Array.from({ length: 15 }, (_, i) => {
-        const idNum = (filters.page - 1) * filters.pageSize + i + 1;
-        const paddedId = String(idNum).padStart(3, '0');
-        const names = ['Aarav Sharma', 'Priya Patel', 'Rohan Verma', 'Ananya Iyer', 'Vikram Singh', 'Deepa Rao', 'Karthik Nair', 'Sneha Deshmukh', 'Amit Joshi', 'Neha Gupta', 'Rahul Kulkarni', 'Pooja Reddy', 'Siddharth Menon', 'Kavita Pillai', 'Manoj Kumar'];
-        const name = names[i % names.length];
-        const loc = locationsList[i % locationsList.length];
-        const rName = rolesList[i % rolesList.length];
-        return {
-          id: idNum,
-          employee_id: `EMP${paddedId}`,
-          full_name: `${name} ${idNum > 15 ? `(${idNum})` : ''}`.trim(),
-          email: `${name.toLowerCase().replace(' ', '.')}${idNum > 15 ? idNum : ''}@rupeek.com`,
-          mobile_number: `+91 98${String(10000000 + idNum * 777).slice(0, 8)}`,
-          role_name: rName,
-          location_name: loc,
-          reporting_manager_name: i % 4 === 0 ? 'Amit Kumar' : i % 3 === 0 ? 'Priya Sharma' : 'Raj Kumar',
-          reporting_manager_employee_id: `EMP00${(i % 5) + 1}`,
-          employment_status: i === 7 || i === 13 ? 'INACTIVE' : 'ACTIVE',
-          skillup_access: i === 11 || i === 14 ? 'DISABLED' : 'ENABLED',
-          created_at: '2026-01-15T09:30:00Z'
-        };
-      });
-      setEmployees(sampleList);
-      setTotalCount(813);
+      console.error('Error fetching employees from Supabase:', err);
+      setEmployees([]);
+      setTotalCount(0);
+      setQueryError(err?.message || 'Failed to load employees from Supabase.');
     } finally {
       setIsLoading(false);
     }
@@ -96,6 +89,29 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
+
+  // Load real learning activity when an employee is selected
+  useEffect(() => {
+    let isMounted = true;
+    if (selectedEmployee) {
+      setIsLoadingActivity(true);
+      fetchEmployeeLearningActivity(selectedEmployee.employee_id)
+        .then(activity => {
+          if (isMounted) {
+            setLearningActivity(activity);
+          }
+        })
+        .catch(() => {
+          if (isMounted) setLearningActivity(null);
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingActivity(false);
+        });
+    } else {
+      setLearningActivity(null);
+    }
+    return () => { isMounted = false; };
+  }, [selectedEmployee]);
 
   const handleSearchChange = (val: string) => {
     setFilters(prev => ({ ...prev, search: val, page: 1 }));
@@ -117,20 +133,77 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
     });
   };
 
+  // Real CSV Export of currently displayed or filtered dataset
+  const handleExportRoster = () => {
+    if (employees.length === 0) {
+      showError('No employee records matching current criteria to export.', 'Export Empty');
+      return;
+    }
+
+    try {
+      const headers = [
+        'Employee ID',
+        'Full Name',
+        'Official Email ID',
+        'Mobile Number',
+        'Designation',
+        'Operating Location',
+        'Reporting Manager Employee ID',
+        'Reporting Manager Name',
+        'Employment Status',
+        'SkillUp Access'
+      ].join(',');
+
+      const csvRows = employees.map(emp => {
+        const escapeCsv = (str: string | undefined | null) => `"${(str || '').replace(/"/g, '""')}"`;
+        return [
+          escapeCsv(emp.employee_id),
+          escapeCsv(emp.full_name),
+          escapeCsv(emp.email),
+          escapeCsv(emp.mobile_number),
+          escapeCsv(emp.role_name || (emp.role_id ? `Role #${emp.role_id}` : '')),
+          escapeCsv(emp.location_name || (emp.location_id ? `Location #${emp.location_id}` : '')),
+          escapeCsv(emp.reporting_manager_employee_id),
+          escapeCsv(emp.reporting_manager_name),
+          escapeCsv(emp.employment_status),
+          escapeCsv(emp.skillup_access)
+        ].join(',');
+      });
+
+      const fullCsv = [headers, ...csvRows].join('\n');
+      const blob = new Blob([fullCsv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `SkillUp_Employees_Roster_Page${filters.page}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showSuccess(`Exported ${employees.length} records to CSV.`, 'Roster Exported');
+    } catch (err: any) {
+      console.error('Error exporting roster:', err);
+      showError('Failed to generate roster export.', 'Export Error');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in font-sans">
-      {/* Header & Quick Summary */}
+      {/* Header & Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Employee Directory</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Employee Directory & Access Control</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Querying <strong className="text-slate-800 font-semibold">{totalCount}</strong> business-team employees across 26 operating locations.
+            Querying <strong className="text-slate-800 font-semibold">{totalCount}</strong> business-team employees across {locations.length > 0 ? `${locations.length} operating locations` : 'operating locations'}.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Export Roster */}
           <button
-            onClick={() => showInfo('CSV report generation initialized from database records.', 'Exporting Employee Roster')}
+            onClick={handleExportRoster}
             className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
           >
             <svg className="w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -138,8 +211,51 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
             </svg>
             <span>Export Roster</span>
           </button>
+
+          {/* Bulk Import Button */}
+          {canManageEmployees && (
+            <button
+              onClick={() => setIsBulkModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span>Bulk Import CSV</span>
+            </button>
+          )}
+
+          {/* Add Employee Button */}
+          {canManageEmployees && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              <span>+ Add Employee</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {queryError && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Error querying Supabase: {queryError}</span>
+          </div>
+          <button
+            onClick={loadEmployees}
+            className="px-3 py-1 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 transition"
+          >
+            Retry Query
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Panel */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3">
@@ -175,9 +291,9 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
               onChange={(e) => handleFilterChange('location', e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              <option value="ALL">All Locations (26 Cities)</option>
-              {locationsList.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
+              <option value="ALL">All Locations {locations.length > 0 ? `(${locations.length} Locations)` : ''}</option>
+              {locations.map(loc => (
+                <option key={loc.id} value={String(loc.id)}>{loc.city || loc.name}</option>
               ))}
             </select>
           </div>
@@ -189,9 +305,9 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
               onChange={(e) => handleFilterChange('role', e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
-              <option value="ALL">All Roles (15 Designations)</option>
-              {rolesList.map(r => (
-                <option key={r} value={r}>{r}</option>
+              <option value="ALL">All Roles {roles.length > 0 ? `(${roles.length} Roles)` : ''}</option>
+              {roles.map(r => (
+                <option key={r.id} value={String(r.id)}>{r.name}</option>
               ))}
             </select>
           </div>
@@ -226,8 +342,8 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-slate-400 font-medium">Active filters:</span>
               {filters.search && <Badge variant="primary" size="sm">Search: {filters.search}</Badge>}
-              {filters.location !== 'ALL' && <Badge variant="neutral" size="sm">City: {filters.location}</Badge>}
-              {filters.role !== 'ALL' && <Badge variant="neutral" size="sm">Role: {filters.role}</Badge>}
+              {filters.location !== 'ALL' && <Badge variant="neutral" size="sm">Location Filter</Badge>}
+              {filters.role !== 'ALL' && <Badge variant="neutral" size="sm">Role Filter</Badge>}
               {filters.employmentStatus !== 'ALL' && <Badge variant="active" size="sm">Status: {filters.employmentStatus}</Badge>}
               {filters.skillUpAccess !== 'ALL' && <Badge variant="enabled" size="sm">Access: {filters.skillUpAccess}</Badge>}
             </div>
@@ -255,7 +371,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                 <th className="py-3.5 px-4">Reporting Manager</th>
                 <th className="py-3.5 px-4 text-center">Employment</th>
                 <th className="py-3.5 px-4 text-center">SkillUp Access</th>
-                <th className="py-3.5 px-4 text-right">Action</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -273,7 +389,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                     <td className="py-4 px-4"><div className="h-4 bg-slate-100 rounded w-24" /></td>
                     <td className="py-4 px-4 text-center"><div className="h-5 bg-slate-100 rounded-full w-16 mx-auto" /></td>
                     <td className="py-4 px-4 text-center"><div className="h-5 bg-slate-100 rounded-full w-16 mx-auto" /></td>
-                    <td className="py-4 px-4 text-right"><div className="h-7 bg-slate-100 rounded-lg w-12 ml-auto" /></td>
+                    <td className="py-4 px-4 text-right"><div className="h-7 bg-slate-100 rounded-lg w-20 ml-auto" /></td>
                   </tr>
                 ))
               ) : employees.length === 0 ? (
@@ -297,7 +413,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
               ) : (
                 employees.map((emp) => (
                   <tr
-                    key={emp.employee_id}
+                    key={emp.employee_id || emp.id}
                     className="hover:bg-slate-50/80 transition cursor-pointer"
                     onClick={() => setSelectedEmployee(emp)}
                   >
@@ -310,7 +426,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                          {emp.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          {emp.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'EM'}
                         </div>
                         <div>
                           <div className="font-bold text-slate-900">{emp.full_name}</div>
@@ -326,7 +442,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
 
                     {/* Designation */}
                     <td className="py-3.5 px-4 text-slate-800 font-semibold">
-                      {emp.role_name || 'Business Associate'}
+                      {emp.role_name || (emp.role_id ? `Role #${emp.role_id}` : 'Unassigned')}
                     </td>
 
                     {/* Operating Location */}
@@ -336,13 +452,13 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span>{emp.location_name || 'Bangalore'}</span>
+                        <span>{emp.location_name || (emp.location_id ? `Location #${emp.location_id}` : 'Unassigned')}</span>
                       </div>
                     </td>
 
                     {/* Reporting Manager */}
                     <td className="py-3.5 px-4 text-slate-700">
-                      <div className="font-medium">{emp.reporting_manager_name || 'Amit Kumar'}</div>
+                      <div className="font-medium">{emp.reporting_manager_name || '—'}</div>
                       {emp.reporting_manager_employee_id && (
                         <div className="text-[10px] text-slate-400 font-mono">({emp.reporting_manager_employee_id})</div>
                       )}
@@ -355,7 +471,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                         size="sm"
                         dot
                       >
-                        {emp.employment_status}
+                        {emp.employment_status || 'ACTIVE'}
                       </Badge>
                     </td>
 
@@ -365,21 +481,54 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                         variant={emp.skillup_access === 'ENABLED' ? 'enabled' : 'disabled'}
                         size="sm"
                       >
-                        {emp.skillup_access}
+                        {emp.skillup_access || 'ENABLED'}
                       </Badge>
                     </td>
 
-                    {/* Action */}
+                    {/* Action Group */}
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedEmployee(emp);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 hover:text-orange-600 text-slate-600 font-bold text-xs transition"
-                      >
-                        View
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        {/* View Button */}
+                        <button
+                          onClick={() => setSelectedEmployee(emp)}
+                          className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition"
+                          title="View Employee Profile"
+                        >
+                          View
+                        </button>
+
+                        {/* Edit Button */}
+                        {canManageEmployees && (
+                          <button
+                            onClick={() => setEditingEmployee(emp)}
+                            className="px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 font-semibold text-[11px] transition"
+                            title="Edit Employee Master Record"
+                          >
+                            Edit
+                          </button>
+                        )}
+
+                        {/* Access Toggle Button */}
+                        {canManageAccess && (
+                          emp.skillup_access === 'ENABLED' ? (
+                            <button
+                              onClick={() => setTogglingState({ employee: emp, targetAccess: 'DISABLED' })}
+                              className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-[11px] transition"
+                              title="Disable SkillUp Learning Access"
+                            >
+                              Disable
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setTogglingState({ employee: emp, targetAccess: 'ENABLED' })}
+                              className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-[11px] transition"
+                              title="Enable SkillUp Learning Access"
+                            >
+                              Enable
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -412,7 +561,7 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
             <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-base shadow-sm">
-                  {selectedEmployee.full_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  {selectedEmployee.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'EM'}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -443,23 +592,23 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 bg-white border border-slate-200 rounded-xl">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Designation / Role</span>
-                <div className="text-xs font-bold text-slate-800 mt-0.5">{selectedEmployee.role_name || 'Business Associate'}</div>
+                <div className="text-xs font-bold text-slate-800 mt-0.5">{selectedEmployee.role_name || (selectedEmployee.role_id ? `Role #${selectedEmployee.role_id}` : 'Unassigned')}</div>
               </div>
 
               <div className="p-3 bg-white border border-slate-200 rounded-xl">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Operating Location</span>
-                <div className="text-xs font-bold text-slate-800 mt-0.5">{selectedEmployee.location_name || 'Bangalore HQ'}</div>
+                <div className="text-xs font-bold text-slate-800 mt-0.5">{selectedEmployee.location_name || (selectedEmployee.location_id ? `Location #${selectedEmployee.location_id}` : 'Unassigned')}</div>
               </div>
 
               <div className="p-3 bg-white border border-slate-200 rounded-xl">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Official Mobile</span>
-                <div className="text-xs font-mono font-bold text-slate-800 mt-0.5">{selectedEmployee.mobile_number || 'N/A'}</div>
+                <div className="text-xs font-mono font-bold text-slate-800 mt-0.5">{selectedEmployee.mobile_number || '—'}</div>
               </div>
 
               <div className="p-3 bg-white border border-slate-200 rounded-xl">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reporting Manager</span>
                 <div className="text-xs font-bold text-slate-800 mt-0.5">
-                  {selectedEmployee.reporting_manager_name || 'Amit Kumar'}
+                  {selectedEmployee.reporting_manager_name || '—'}
                   {selectedEmployee.reporting_manager_employee_id && (
                     <span className="text-[11px] font-mono text-slate-400 ml-1">({selectedEmployee.reporting_manager_employee_id})</span>
                   )}
@@ -467,23 +616,89 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
               </div>
             </div>
 
-            {/* Learning Status Overview */}
-            <div className="p-4 bg-orange-50/50 border border-orange-200/60 rounded-2xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800">SkillUp Learning Progress</span>
-                <span className="text-orange-600 font-bold">4 Courses Assigned</span>
+            {/* Learning Activity Status Section */}
+            {isLoadingActivity ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl animate-pulse space-y-2">
+                <div className="h-4 bg-slate-200 rounded w-1/3" />
+                <div className="h-3 bg-slate-100 rounded w-1/2" />
               </div>
-              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                <div className="bg-orange-500 h-2 rounded-full" style={{ width: '75%' }} />
+            ) : learningActivity && learningActivity.assignedCount > 0 ? (
+              <div className="p-4 bg-orange-50/60 border border-orange-200/80 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800">SkillUp Learning Progress</span>
+                  <span className="text-orange-600 font-bold">{learningActivity.assignedCount} Courses Assigned</span>
+                </div>
+                
+                <div className="space-y-2">
+                  {learningActivity.assignments.map(a => (
+                    <div key={a.id} className="p-2.5 bg-white rounded-xl border border-orange-100 flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-slate-800 text-xs">{a.courseTitle}</div>
+                        <div className="text-[10px] text-slate-400 uppercase">{a.status}</div>
+                      </div>
+                      <span className="font-bold text-slate-700">{a.progress}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>3 Completed &bull; 1 In Progress</span>
-                <span>Avg Score: <strong>88%</strong></span>
+            ) : (
+              <div className="p-5 bg-slate-50 border border-slate-200/70 rounded-2xl text-center space-y-1.5">
+                <svg className="w-6 h-6 text-slate-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                <div className="font-bold text-slate-700 text-xs">No learning activity yet</div>
+                <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                  Course assignments and module completions will appear here once curricula are assigned to this employee.
+                </p>
               </div>
-            </div>
+            )}
 
-            {/* Footer Action */}
-            <div className="flex justify-end pt-2 border-t border-slate-100">
+            {/* Profile Action Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2">
+                {canManageEmployees && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const emp = selectedEmployee;
+                      setSelectedEmployee(null);
+                      setEditingEmployee(emp);
+                    }}
+                    className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold rounded-xl text-xs transition"
+                  >
+                    Edit Details
+                  </button>
+                )}
+
+                {canManageAccess && (
+                  selectedEmployee.skillup_access === 'ENABLED' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const emp = selectedEmployee;
+                        setSelectedEmployee(null);
+                        setTogglingState({ employee: emp, targetAccess: 'DISABLED' });
+                      }}
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition"
+                    >
+                      Disable Access
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const emp = selectedEmployee;
+                        setSelectedEmployee(null);
+                        setTogglingState({ employee: emp, targetAccess: 'ENABLED' });
+                      }}
+                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl text-xs transition"
+                    >
+                      Enable Access
+                    </button>
+                  )
+                )}
+              </div>
+
               <button
                 type="button"
                 onClick={() => setSelectedEmployee(null)}
@@ -495,6 +710,45 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
           </div>
         </Modal>
       )}
+
+      {/* Add Employee Modal */}
+      <AddEmployeeModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSuccess={loadEmployees}
+        roles={roles}
+        locations={locations}
+      />
+
+      {/* Edit Employee Modal */}
+      <EditEmployeeModal
+        isOpen={Boolean(editingEmployee)}
+        onClose={() => setEditingEmployee(null)}
+        onSuccess={loadEmployees}
+        employee={editingEmployee}
+        roles={roles}
+        locations={locations}
+      />
+
+      {/* Access Toggle Confirmation Modal */}
+      {togglingState && (
+        <AccessToggleModal
+          isOpen={Boolean(togglingState)}
+          onClose={() => setTogglingState(null)}
+          onSuccess={loadEmployees}
+          employee={togglingState.employee}
+          targetAccess={togglingState.targetAccess}
+        />
+      )}
+
+      {/* Bulk CSV Import Modal */}
+      <BulkImportModal
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onSuccess={loadEmployees}
+        roles={roles}
+        locations={locations}
+      />
     </div>
   );
 };

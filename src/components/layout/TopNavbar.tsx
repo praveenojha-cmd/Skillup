@@ -76,11 +76,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         {/* User Pill */}
         <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-            {adminProfile?.name?.charAt(0) || 'P'}
+            {adminProfile?.name?.charAt(0) || 'A'}
           </div>
           <div className="hidden xl:block text-left">
-            <div className="text-xs font-bold text-slate-900 leading-none">{adminProfile?.name || 'Praveen Ojha'}</div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">{adminProfile?.role || 'SUPER_ADMIN'}</div>
+            <div className="text-xs font-bold text-slate-900 leading-none">{adminProfile?.name || 'Administrator'}</div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">{adminProfile?.role || 'LND_ADMIN'}</div>
           </div>
         </div>
       </div>

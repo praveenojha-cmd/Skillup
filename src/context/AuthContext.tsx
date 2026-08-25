@@ -1,14 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { getSupabaseClient, verifyAdminUser, getStoredSupabaseConfig } from '../lib/supabase';
-import { AdminUser } from '../types/database';
-import { AuthState } from '../types/auth';
+import { getSupabaseClient, verifyAdminUser, verifyEmployeeUser } from '../lib/supabase';
+import { AdminUser, Employee } from '../types/database';
+import { AuthState, UserPortalRole } from '../types/auth';
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password?: string, preferredPortal?: 'ADMIN' | 'EMPLOYEE') => Promise<{ success: boolean; error?: string; portal?: 'ADMIN' | 'EMPLOYEE' }>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
   refreshAdminSession: () => Promise<void>;
   isSuperAdmin: boolean;
+  canManageEmployees: boolean;
+  canManageAccess: boolean;
+  activePortal: 'ADMIN' | 'EMPLOYEE';
+  setActivePortal: (portal: 'ADMIN' | 'EMPLOYEE') => void;
+  isEmployee: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,31 +24,94 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [adminProfile, setAdminProfile] = useState<AdminUser | null>(null);
+  const [employeeProfile, setEmployeeProfile] = useState<Employee | null>(null);
+  const [portalRole, setPortalRole] = useState<UserPortalRole | null>(null);
+  const [activePortal, setActivePortalState] = useState<'ADMIN' | 'EMPLOYEE'>('ADMIN');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessDeniedReason, setAccessDeniedReason] = useState<string | null>(null);
 
-  const checkAdminAuthorization = useCallback(async (userEmail: string, authUser?: User) => {
+  const setActivePortal = (portal: 'ADMIN' | 'EMPLOYEE') => {
+    setActivePortalState(portal);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('skillup_preferred_portal', portal);
+    }
+  };
+
+  const checkUserAuthorization = useCallback(async (userEmail: string, authUser?: User, preferredPortal?: 'ADMIN' | 'EMPLOYEE') => {
     try {
-      const admin = await verifyAdminUser(userEmail);
-      if (admin && admin.is_active) {
-        setAdminProfile(admin);
-        setError(null);
-        return true;
+      const authUserId = authUser?.id;
+      
+      // Concurrently verify Admin and Employee credentials
+      const [adminRes, empRes] = await Promise.all([
+        verifyAdminUser(userEmail, authUserId),
+        verifyEmployeeUser(userEmail, authUserId)
+      ]);
+
+      const isAdminActive = Boolean(adminRes && adminRes.is_active);
+      const isEmpAllowed = empRes.accessStatus === 'ALLOWED' && Boolean(empRes.employee);
+
+      if (adminRes && adminRes.is_active) {
+        setAdminProfile(adminRes);
       } else {
-        // User authenticated with Supabase Auth, but NOT in admin_users or inactive
-        console.warn(`Access denied for ${userEmail}: Not an active admin.`);
         setAdminProfile(null);
-        setError('You do not have administrator access.');
+      }
+
+      if (empRes.employee) {
+        setEmployeeProfile(empRes.employee);
+      } else {
+        setEmployeeProfile(null);
+      }
+
+      if (empRes.accessStatus === 'DISABLED') {
+        setAccessDeniedReason('Your SkillUp learning access is currently disabled. Please contact your administrator.');
+      } else if (empRes.accessStatus === 'INACTIVE') {
+        setAccessDeniedReason('Your employee profile is currently marked as INACTIVE. Learning portal access is unavailable.');
+      } else {
+        setAccessDeniedReason(null);
+      }
+
+      if (isAdminActive && isEmpAllowed) {
+        setPortalRole('DUAL');
+        const storedPref = typeof window !== 'undefined' ? localStorage.getItem('skillup_preferred_portal') : null;
+        const initialPortal = preferredPortal || (storedPref as 'ADMIN' | 'EMPLOYEE') || 'ADMIN';
+        setActivePortalState(initialPortal);
+        setError(null);
+        return { success: true, portal: initialPortal };
+      } else if (isAdminActive) {
+        setPortalRole('ADMIN');
+        setActivePortalState('ADMIN');
+        setError(null);
+        return { success: true, portal: 'ADMIN' as const };
+      } else if (isEmpAllowed) {
+        setPortalRole('EMPLOYEE');
+        setActivePortalState('EMPLOYEE');
+        setError(null);
+        return { success: true, portal: 'EMPLOYEE' as const };
+      } else {
+        // Neither active admin nor active enabled employee
+        let deniedMsg = 'Access Denied: You do not have active access to SkillUp.';
+        if (empRes.accessStatus === 'DISABLED') {
+          deniedMsg = 'Your SkillUp learning access is currently disabled. Please contact your administrator.';
+        } else if (empRes.accessStatus === 'INACTIVE') {
+          deniedMsg = 'Your employee profile is currently marked as INACTIVE. Learning portal access is unavailable.';
+        }
+
+        setError(deniedMsg);
         const client = getSupabaseClient();
         await client.auth.signOut();
         setUser(null);
         setSession(null);
-        return false;
+        setAdminProfile(null);
+        setEmployeeProfile(null);
+        setPortalRole(null);
+        return { success: false, error: deniedMsg };
       }
     } catch (err: any) {
-      console.error('Error verifying admin authorization:', err);
-      setError(err?.message || 'Verification error');
-      return false;
+      console.error('Error verifying user authorization:', err);
+      const errMsg = err?.message || 'Verification error';
+      setError(errMsg);
+      return { success: false, error: errMsg };
     }
   }, []);
 
@@ -60,16 +130,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (existingSession?.user?.email) {
           setSession(existingSession);
           setUser(existingSession.user);
-          await checkAdminAuthorization(existingSession.user.email, existingSession.user);
+          await checkUserAuthorization(existingSession.user.email, existingSession.user);
         } else {
-          // Check if we have demo/stored active admin session
-          const savedEmail = localStorage.getItem('skillup_active_admin_email');
-          if (savedEmail) {
-            const admin = await verifyAdminUser(savedEmail);
-            if (admin && isMounted) {
-              setAdminProfile(admin);
-            }
-          }
+          setUser(null);
+          setSession(null);
+          setAdminProfile(null);
+          setEmployeeProfile(null);
+          setPortalRole(null);
         }
       } catch (err) {
         console.error('Error checking auth session:', err);
@@ -87,12 +154,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (event === 'SIGNED_IN' && currentSession?.user?.email) {
         setSession(currentSession);
         setUser(currentSession.user);
-        await checkAdminAuthorization(currentSession.user.email, currentSession.user);
+        await checkUserAuthorization(currentSession.user.email, currentSession.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setSession(null);
         setAdminProfile(null);
-        localStorage.removeItem('skillup_active_admin_email');
+        setEmployeeProfile(null);
+        setPortalRole(null);
       }
     });
 
@@ -100,66 +168,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [checkAdminAuthorization]);
+  }, [checkUserAuthorization]);
 
-  const login = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (
+    email: string, 
+    password?: string,
+    preferredPortal?: 'ADMIN' | 'EMPLOYEE'
+  ): Promise<{ success: boolean; error?: string; portal?: 'ADMIN' | 'EMPLOYEE' }> => {
     setIsLoading(true);
     setError(null);
+    setAccessDeniedReason(null);
     const client = getSupabaseClient();
     const cleanEmail = email.trim().toLowerCase();
 
-    try {
-      // 1. Attempt Supabase Auth signInWithPassword if password provided
-      if (password) {
-        const { data, error: signInError } = await client.auth.signInWithPassword({
-          email: cleanEmail,
-          password: password
-        });
-
-        if (signInError) {
-          // If project connection or credential mismatch, provide informative feedback
-          console.warn('Supabase signInWithPassword notice:', signInError.message);
-          
-          // Check if admin is mapped in admin_users for direct internal authentication
-          const adminCheck = await verifyAdminUser(cleanEmail);
-          if (adminCheck && adminCheck.is_active) {
-            setAdminProfile(adminCheck);
-            localStorage.setItem('skillup_active_admin_email', cleanEmail);
-            setIsLoading(false);
-            return { success: true };
-          }
-          
-          setError(signInError.message || 'Invalid email or password.');
-          setIsLoading(false);
-          return { success: false, error: signInError.message };
-        }
-
-        if (data.user?.email) {
-          setUser(data.user);
-          setSession(data.session);
-          const isAuthorized = await checkAdminAuthorization(data.user.email, data.user);
-          setIsLoading(false);
-          if (!isAuthorized) {
-            return { success: false, error: 'You do not have administrator access.' };
-          }
-          localStorage.setItem('skillup_active_admin_email', cleanEmail);
-          return { success: true };
-        }
-      }
-
-      // Direct email admin verification (for direct single-sign-on / Super Admin verification)
-      const admin = await verifyAdminUser(cleanEmail);
-      if (!admin || !admin.is_active) {
-        const errMsg = 'You do not have administrator access.';
-        setError(errMsg);
-        setIsLoading(false);
-        return { success: false, error: errMsg };
-      }
-
-      setAdminProfile(admin);
-      localStorage.setItem('skillup_active_admin_email', cleanEmail);
+    if (!cleanEmail || !password) {
+      const errMsg = 'Email and password are required.';
+      setError(errMsg);
       setIsLoading(false);
-      return { success: true };
+      return { success: false, error: errMsg };
+    }
+
+    try {
+      // 1. Authenticate with Supabase Auth
+      const { data, error: signInError } = await client.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password
+      });
+
+      if (signInError) {
+        console.warn('Supabase signInWithPassword failed:', signInError.message);
+        setError(signInError.message || 'Invalid email or password.');
+        setIsLoading(false);
+        return { success: false, error: signInError.message };
+      }
+
+      if (data.user?.email) {
+        setUser(data.user);
+        setSession(data.session);
+        const authResult = await checkUserAuthorization(data.user.email, data.user, preferredPortal);
+        setIsLoading(false);
+        if (!authResult.success) {
+          return { success: false, error: authResult.error || 'Access denied.' };
+        }
+        return { success: true, portal: authResult.portal };
+      }
+
+      setError('Authentication failed. No user returned.');
+      setIsLoading(false);
+      return { success: false, error: 'Authentication failed.' };
     } catch (err: any) {
       console.error('Login exception:', err);
       const errMsg = err?.message || 'Authentication failed. Please check your credentials.';
@@ -180,19 +236,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setSession(null);
       setAdminProfile(null);
-      localStorage.removeItem('skillup_active_admin_email');
+      setEmployeeProfile(null);
+      setPortalRole(null);
       setIsLoading(false);
     }
   };
 
-  const refreshAdminSession = async () => {
-    if (adminProfile?.email) {
-      await checkAdminAuthorization(adminProfile.email);
+  const refreshSession = async () => {
+    if (user?.email) {
+      await checkUserAuthorization(user.email, user);
     }
   };
 
-  const isAuthenticated = Boolean(adminProfile && adminProfile.is_active);
+  const refreshAdminSession = refreshSession;
+
+  const isAdmin = Boolean(adminProfile && adminProfile.is_active);
+  const isEmployee = Boolean(employeeProfile && employeeProfile.employment_status === 'ACTIVE' && employeeProfile.skillup_access === 'ENABLED');
+  const isAuthenticated = isAdmin || isEmployee;
+  const isEmployeeAuthenticated = isEmployee;
   const isSuperAdmin = adminProfile?.role === 'SUPER_ADMIN';
+  const canManageEmployees = adminProfile?.role === 'SUPER_ADMIN' || adminProfile?.role === 'LND_ADMIN';
+  const canManageAccess = adminProfile?.role === 'SUPER_ADMIN' || adminProfile?.role === 'LND_ADMIN';
 
   return (
     <AuthContext.Provider
@@ -200,13 +264,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         session,
         adminProfile,
+        employeeProfile,
+        portalRole,
+        activePortal,
+        setActivePortal,
         isLoading,
         isAuthenticated,
+        isEmployeeAuthenticated,
+        isAdmin,
+        isEmployee,
         error,
+        accessDeniedReason,
         login,
         logout,
+        refreshSession,
         refreshAdminSession,
-        isSuperAdmin
+        isSuperAdmin,
+        canManageEmployees,
+        canManageAccess
       }}
     >
       {children}
@@ -221,3 +296,4 @@ export function useAuth() {
   }
   return context;
 }
+

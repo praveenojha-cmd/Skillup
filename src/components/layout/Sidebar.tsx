@@ -31,7 +31,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       label: 'Employees',
       route: '/admin/employees' as AppRoute,
-      badge: '813',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -165,17 +164,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-3.5 border-t border-slate-800/80 bg-[#071322] shrink-0">
           <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-900/60 border border-slate-800 mb-3">
             <div className="w-8 h-8 rounded-lg bg-orange-600/30 border border-orange-500/40 text-orange-300 flex items-center justify-center font-bold text-xs">
-              {adminProfile?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'PO'}
+              {adminProfile?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'AD'}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-bold text-white truncate">{adminProfile?.name || 'Praveen Ojha'}</div>
-              <div className="text-[10.5px] text-slate-400 truncate">{adminProfile?.email || 'praveen.ojha@rupeek.com'}</div>
+              <div className="text-xs font-bold text-white truncate">{adminProfile?.name || 'Administrator'}</div>
+              <div className="text-[10.5px] text-slate-400 truncate">{adminProfile?.email || 'admin@rupeek.com'}</div>
             </div>
           </div>
 
           <div className="flex items-center justify-between px-1">
             <Badge variant="warning" size="sm">
-              {adminProfile?.role || 'SUPER_ADMIN'}
+              {adminProfile?.role || 'LND_ADMIN'}
             </Badge>
 
             <button

@@ -771,7 +771,7 @@
   var require_react_dom_production = __commonJS({
     "node_modules/react-dom/cjs/react-dom.production.js"(exports) {
       "use strict";
-      var React17 = require_react();
+      var React29 = require_react();
       function formatProdErrorMessage(code) {
         var url = "https://react.dev/errors/" + code;
         if (1 < arguments.length) {
@@ -811,7 +811,7 @@
           implementation
         };
       }
-      var ReactSharedInternals = React17.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+      var ReactSharedInternals = React29.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
       function getCrossOriginStringAs(as, input) {
         if ("font" === as) return "";
         if ("string" === typeof input)
@@ -947,7 +947,7 @@
     "node_modules/react-dom/cjs/react-dom-client.production.js"(exports) {
       "use strict";
       var Scheduler = require_scheduler();
-      var React17 = require_react();
+      var React29 = require_react();
       var ReactDOM2 = require_react_dom();
       function formatProdErrorMessage(code) {
         var url = "https://react.dev/errors/" + code;
@@ -1138,7 +1138,7 @@
         return null;
       }
       var isArrayImpl = Array.isArray;
-      var ReactSharedInternals = React17.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+      var ReactSharedInternals = React29.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
       var ReactDOMSharedInternals = ReactDOM2.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
       var sharedNotPendingObject = {
         pending: false,
@@ -12584,7 +12584,7 @@
           0 === i && attemptExplicitHydrationTarget(target);
         }
       };
-      var isomorphicReactPackageVersion$jscomp$inline_1840 = React17.version;
+      var isomorphicReactPackageVersion$jscomp$inline_1840 = React29.version;
       if ("19.2.8" !== isomorphicReactPackageVersion$jscomp$inline_1840)
         throw Error(
           formatProdErrorMessage(
@@ -12710,11 +12710,11 @@
   });
 
   // src/main.tsx
-  var import_react16 = __toESM(require_react());
+  var import_react28 = __toESM(require_react());
   var import_client = __toESM(require_client());
 
   // src/App.tsx
-  var import_react15 = __toESM(require_react());
+  var import_react27 = __toESM(require_react());
 
   // src/context/AuthContext.tsx
   var import_react = __toESM(require_react());
@@ -33049,219 +33049,1291 @@ ${suffix}`;
           message: "Supabase URL or Anon Key is not configured yet."
         };
       }
-      const { data, error } = await client.from("employees").select("count", { count: "exact", head: true });
+      const { count, error } = await client.from("employees").select("*", { count: "exact", head: true });
       if (error) {
         if (error.code === "PGRST301" || error.message.includes("permission denied") || error.message.includes("JWT")) {
           return {
             ok: true,
-            message: "Connected to Supabase. RLS policies active.",
+            message: "Connected to Supabase. Row Level Security active.",
             details: { rlsActive: true }
           };
         }
         return {
           ok: false,
-          message: `Supabase query error: ${error.message} (Code: ${error.code})`
+          message: `Supabase error: ${error.message} (Code: ${error.code})`
         };
       }
       return {
         ok: true,
-        message: "Successfully connected to Supabase backend.",
-        details: { rowCount: data }
+        message: `Successfully connected. Verified ${count ?? 0} employees in PostgreSQL.`,
+        details: { rowCount: count }
       };
     } catch (err) {
       return {
         ok: false,
-        message: `Connection failed: ${err?.message || "Unknown network error"}`
+        message: `Connection failed: ${err?.message || "Network error"}`
       };
     }
   }
   async function fetchLocations() {
-    try {
-      const client = getSupabaseClient();
-      const { data, error } = await client.from("locations").select("*").order("name", { ascending: true });
-      if (error) {
-        console.warn("Could not fetch locations from table, extracting from employees:", error.message);
-        return [];
-      }
-      return data || [];
-    } catch (err) {
-      console.error("Error fetching locations:", err);
-      return [];
+    const client = getSupabaseClient();
+    const { data, error } = await client.from("locations").select("id, name, city, state, code, created_at").order("name", { ascending: true });
+    if (error) {
+      console.error("Error fetching locations from public.locations:", error.message);
+      throw error;
     }
+    return data || [];
   }
   async function fetchRoles() {
-    try {
-      const client = getSupabaseClient();
-      const { data, error } = await client.from("roles").select("*").order("name", { ascending: true });
-      if (error) {
-        console.warn("Could not fetch roles from table, extracting from employees:", error.message);
-        return [];
-      }
-      return data || [];
-    } catch (err) {
-      console.error("Error fetching roles:", err);
-      return [];
+    const client = getSupabaseClient();
+    const { data, error } = await client.from("roles").select("id, name, department, level, created_at").order("name", { ascending: true });
+    if (error) {
+      console.error("Error fetching roles from public.roles:", error.message);
+      throw error;
     }
+    return data || [];
   }
   async function fetchEmployees(filters) {
     const client = getSupabaseClient();
     const { search, location: location2, role, employmentStatus, skillUpAccess, page, pageSize } = filters;
-    try {
-      let query = client.from("employees").select("*, roles(name), locations(name, city)", { count: "exact" });
-      if (search.trim()) {
-        const q = search.trim();
-        query = query.or(`employee_id.ilike.%${q}%,full_name.ilike.%${q}%,email.ilike.%${q}%,reporting_manager_name.ilike.%${q}%`);
-      }
-      if (employmentStatus !== "ALL") {
-        query = query.eq("employment_status", employmentStatus);
-      }
-      if (skillUpAccess !== "ALL") {
-        query = query.eq("skillup_access", skillUpAccess);
-      }
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      query = query.order("created_at", { ascending: false, nullsFirst: false }).range(from, to);
-      const { data, count, error } = await query;
-      if (error) {
-        console.error("Error in fetchEmployees query:", error);
-        throw error;
-      }
-      const employees = (data || []).map((row) => ({
-        ...row,
-        role_name: row.roles?.name || row.role_name || (row.role_id ? `Role #${row.role_id}` : "Unassigned"),
-        location_name: row.locations?.city || row.locations?.name || row.location_name || (row.location_id ? `Loc #${row.location_id}` : "Corporate HQ")
-      }));
-      let filteredEmployees = employees;
-      if (location2 && location2 !== "ALL") {
-        filteredEmployees = filteredEmployees.filter(
-          (e) => e.location_name?.toLowerCase() === location2.toLowerCase() || String(e.location_id) === location2
-        );
-      }
-      if (role && role !== "ALL") {
-        filteredEmployees = filteredEmployees.filter(
-          (e) => e.role_name?.toLowerCase() === role.toLowerCase() || String(e.role_id) === role
-        );
-      }
-      return {
-        employees: filteredEmployees,
-        totalCount: count ?? filteredEmployees.length,
-        locationsList: [],
-        rolesList: []
-      };
-    } catch (err) {
-      console.error("Failed to fetch employees from Supabase:", err);
-      throw err;
+    let query = client.from("employees").select(
+      "id, employee_id, full_name, email, mobile_number, role_id, location_id, internal_manager_id, employment_status, skillup_access, auth_user_id, reporting_manager_employee_id, reporting_manager_name, created_at, updated_at, roles(id, name), locations(id, name, city)",
+      { count: "exact" }
+    );
+    if (search && search.trim()) {
+      const q = search.trim();
+      query = query.or(`employee_id.ilike.%${q}%,full_name.ilike.%${q}%,email.ilike.%${q}%,reporting_manager_name.ilike.%${q}%,reporting_manager_employee_id.ilike.%${q}%`);
     }
+    if (location2 && location2 !== "ALL") {
+      if (!isNaN(Number(location2))) {
+        query = query.eq("location_id", Number(location2));
+      }
+    }
+    if (role && role !== "ALL") {
+      if (!isNaN(Number(role))) {
+        query = query.eq("role_id", Number(role));
+      }
+    }
+    if (employmentStatus && employmentStatus !== "ALL") {
+      query = query.eq("employment_status", employmentStatus);
+    }
+    if (skillUpAccess && skillUpAccess !== "ALL") {
+      query = query.eq("skillup_access", skillUpAccess);
+    }
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.order("created_at", { ascending: false, nullsFirst: false }).range(from, to);
+    const { data, count, error } = await query;
+    if (error) {
+      console.error("Error querying public.employees:", error);
+      throw error;
+    }
+    let employees = (data || []).map((row) => ({
+      id: row.id,
+      employee_id: row.employee_id,
+      full_name: row.full_name,
+      email: row.email,
+      mobile_number: row.mobile_number,
+      role_id: row.role_id,
+      location_id: row.location_id,
+      internal_manager_id: row.internal_manager_id,
+      employment_status: row.employment_status,
+      skillup_access: row.skillup_access,
+      auth_user_id: row.auth_user_id,
+      reporting_manager_employee_id: row.reporting_manager_employee_id,
+      reporting_manager_name: row.reporting_manager_name,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      role_name: row.roles?.name || (row.role_id ? `Role #${row.role_id}` : "Unassigned"),
+      location_name: row.locations?.city || row.locations?.name || (row.location_id ? `Location #${row.location_id}` : "Unassigned")
+    }));
+    if (location2 && location2 !== "ALL" && isNaN(Number(location2))) {
+      employees = employees.filter((e) => e.location_name?.toLowerCase() === location2.toLowerCase());
+    }
+    if (role && role !== "ALL" && isNaN(Number(role))) {
+      employees = employees.filter((e) => e.role_name?.toLowerCase() === role.toLowerCase());
+    }
+    return {
+      employees,
+      totalCount: count ?? employees.length
+    };
   }
   async function fetchDashboardStats() {
     const client = getSupabaseClient();
-    try {
-      const { count: totalEmployees } = await client.from("employees").select("*", { count: "exact", head: true });
-      const { count: activeEmployees } = await client.from("employees").select("*", { count: "exact", head: true }).eq("employment_status", "ACTIVE");
-      const { count: skillUpEnabled } = await client.from("employees").select("*", { count: "exact", head: true }).eq("skillup_access", "ENABLED");
-      let totalCourses = 0;
-      try {
-        const { count: cCount } = await client.from("courses").select("*", { count: "exact", head: true });
-        totalCourses = cCount || 0;
-      } catch {
-        totalCourses = 0;
-      }
-      let assignedCourses = 0;
-      try {
-        const { count: aCount } = await client.from("course_assignments").select("*", { count: "exact", head: true });
-        assignedCourses = aCount || 0;
-      } catch {
-        assignedCourses = 0;
-      }
-      let completedCourses = 0;
-      try {
-        const { count: compCount } = await client.from("course_completions").select("*", { count: "exact", head: true });
-        completedCourses = compCount || 0;
-      } catch {
-        completedCourses = 0;
-      }
-      const total = totalEmployees ?? 0;
-      const active = activeEmployees ?? 0;
-      const enabled = skillUpEnabled ?? 0;
-      const inactive = Math.max(0, total - active);
-      const disabled = Math.max(0, total - enabled);
-      const completionRate = assignedCourses > 0 ? Math.round(completedCourses / assignedCourses * 100) : 0;
-      return {
-        totalEmployees: total,
-        activeEmployees: active,
-        inactiveEmployees: inactive,
-        skillUpEnabled: enabled,
-        skillUpDisabled: disabled,
-        totalCourses,
-        activeCourses: totalCourses,
-        assignedCourses,
-        completedCourses,
-        completionRate
-      };
-    } catch (err) {
-      console.error("Error fetching dashboard stats from Supabase:", err);
-      return {
-        totalEmployees: 813,
-        activeEmployees: 785,
-        inactiveEmployees: 28,
-        skillUpEnabled: 792,
-        skillUpDisabled: 21,
-        totalCourses: 12,
-        activeCourses: 10,
-        assignedCourses: 1420,
-        completedCourses: 1108,
-        completionRate: 78
-      };
+    const { count: totalEmployees, error: totalErr } = await client.from("employees").select("*", { count: "exact", head: true });
+    if (totalErr) {
+      throw new Error(`Failed to query employees: ${totalErr.message}`);
     }
+    const { count: activeEmployees, error: activeErr } = await client.from("employees").select("*", { count: "exact", head: true }).eq("employment_status", "ACTIVE");
+    if (activeErr) {
+      throw new Error(`Failed to query active employees: ${activeErr.message}`);
+    }
+    const { count: skillUpEnabled, error: enabledErr } = await client.from("employees").select("*", { count: "exact", head: true }).eq("skillup_access", "ENABLED");
+    if (enabledErr) {
+      throw new Error(`Failed to query enabled employees: ${enabledErr.message}`);
+    }
+    const { count: skillUpDisabled, error: disabledErr } = await client.from("employees").select("*", { count: "exact", head: true }).eq("skillup_access", "DISABLED");
+    if (disabledErr) {
+      throw new Error(`Failed to query disabled employees: ${disabledErr.message}`);
+    }
+    let totalCourses = 0;
+    try {
+      const { count: cCount, error: cErr } = await client.from("courses").select("*", { count: "exact", head: true });
+      if (!cErr && cCount !== null) {
+        totalCourses = cCount;
+      }
+    } catch {
+      totalCourses = 0;
+    }
+    let assignedCourses = 0;
+    try {
+      const { count: aCount, error: aErr } = await client.from("course_assignments").select("*", { count: "exact", head: true });
+      if (!aErr && aCount !== null) {
+        assignedCourses = aCount;
+      }
+    } catch {
+      assignedCourses = 0;
+    }
+    let completedCourses = 0;
+    try {
+      const { count: compCount, error: compErr } = await client.from("course_completions").select("*", { count: "exact", head: true });
+      if (!compErr && compCount !== null) {
+        completedCourses = compCount;
+      }
+    } catch {
+      completedCourses = 0;
+    }
+    const total = totalEmployees ?? 0;
+    const active = activeEmployees ?? 0;
+    const enabled = skillUpEnabled ?? 0;
+    const disabled = skillUpDisabled ?? Math.max(0, total - enabled);
+    const inactive = Math.max(0, total - active);
+    const completionRate = assignedCourses > 0 ? Math.round(completedCourses / assignedCourses * 100) : 0;
+    return {
+      totalEmployees: total,
+      activeEmployees: active,
+      inactiveEmployees: inactive,
+      skillUpEnabled: enabled,
+      skillUpDisabled: disabled,
+      totalCourses,
+      activeCourses: totalCourses,
+      assignedCourses,
+      completedCourses,
+      completionRate
+    };
   }
-  async function verifyAdminUser(email) {
+  async function fetchLiveCityDistribution() {
     const client = getSupabaseClient();
     try {
-      const { data, error } = await client.from("admin_users").select("*").eq("email", email).eq("is_active", true).maybeSingle();
-      if (error) {
-        console.warn("Error querying admin_users table:", error.message);
-        if (email.toLowerCase() === "praveen.ojha@rupeek.com") {
-          return {
-            email: "praveen.ojha@rupeek.com",
-            name: "Praveen Ojha",
-            role: "SUPER_ADMIN",
-            is_active: true
-          };
+      const [locationsRes, employeesRes] = await Promise.all([
+        client.from("locations").select("id, name, city"),
+        client.from("employees").select("location_id")
+      ]);
+      const locations = locationsRes.data || [];
+      const employees = employeesRes.data || [];
+      const total = employees.length || 1;
+      const countMap = /* @__PURE__ */ new Map();
+      employees.forEach((emp) => {
+        if (emp.location_id !== null && emp.location_id !== void 0) {
+          countMap.set(emp.location_id, (countMap.get(emp.location_id) || 0) + 1);
         }
+      });
+      const list = locations.map((loc) => {
+        const count = countMap.get(loc.id) || 0;
+        return {
+          location_id: loc.id,
+          location_name: loc.city || loc.name,
+          count,
+          percentage: Math.round(count / total * 100)
+        };
+      });
+      list.sort((a, b) => b.count - a.count);
+      return list;
+    } catch (err) {
+      console.error("Error computing city distribution from Supabase:", err);
+      return [];
+    }
+  }
+  async function fetchLiveDesignationDistribution() {
+    const client = getSupabaseClient();
+    try {
+      const [rolesRes, employeesRes] = await Promise.all([
+        client.from("roles").select("id, name"),
+        client.from("employees").select("role_id")
+      ]);
+      const roles = rolesRes.data || [];
+      const employees = employeesRes.data || [];
+      const total = employees.length || 1;
+      const countMap = /* @__PURE__ */ new Map();
+      employees.forEach((emp) => {
+        if (emp.role_id !== null && emp.role_id !== void 0) {
+          countMap.set(emp.role_id, (countMap.get(emp.role_id) || 0) + 1);
+        }
+      });
+      const list = roles.map((r) => {
+        const count = countMap.get(r.id) || 0;
+        return {
+          role_id: r.id,
+          role_name: r.name,
+          count,
+          percentage: Math.round(count / total * 100)
+        };
+      });
+      list.sort((a, b) => b.count - a.count);
+      return list;
+    } catch (err) {
+      console.error("Error computing designation distribution from Supabase:", err);
+      return [];
+    }
+  }
+  async function fetchEmployeeLearningActivity(employeeId) {
+    const client = getSupabaseClient();
+    try {
+      const { data: assignments, error } = await client.from("course_assignments").select("id, course_id, status, progress_percentage, completed_at, courses(title)").eq("employee_id", employeeId);
+      if (error || !assignments || assignments.length === 0) {
         return null;
       }
-      if (data) {
-        return {
-          id: data.id,
-          auth_user_id: data.auth_user_id,
-          email: data.email,
-          name: data.name || data.full_name || "Admin User",
-          role: data.role || "SUPER_ADMIN",
-          is_active: Boolean(data.is_active),
-          created_at: data.created_at
-        };
-      }
-      if (email.toLowerCase() === "praveen.ojha@rupeek.com") {
-        return {
-          email: "praveen.ojha@rupeek.com",
-          name: "Praveen Ojha",
-          role: "SUPER_ADMIN",
-          is_active: true
-        };
-      }
-      return null;
-    } catch (err) {
-      console.error("Exception verifying admin user:", err);
-      if (email.toLowerCase() === "praveen.ojha@rupeek.com") {
-        return {
-          email: "praveen.ojha@rupeek.com",
-          name: "Praveen Ojha",
-          role: "SUPER_ADMIN",
-          is_active: true
-        };
-      }
+      const total = assignments.length;
+      const completed = assignments.filter((a) => a.status === "COMPLETED" || a.completed_at).length;
+      const inProgress = assignments.filter((a) => a.status === "IN_PROGRESS").length;
+      return {
+        assignedCount: total,
+        completedCount: completed,
+        inProgressCount: inProgress,
+        assignments: assignments.map((a) => ({
+          id: a.id,
+          courseTitle: a.courses?.title || `Course #${a.course_id}`,
+          status: a.status || "NOT_STARTED",
+          progress: a.progress_percentage || 0
+        }))
+      };
+    } catch {
       return null;
     }
+  }
+  async function verifyAdminUser(email, authUserId) {
+    const client = getSupabaseClient();
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      let query = client.from("admin_users").select("id, auth_user_id, email, name, role, is_active, created_at, updated_at").eq("is_active", true);
+      if (authUserId) {
+        query = query.or(`auth_user_id.eq.${authUserId},email.ilike.${cleanEmail}`);
+      } else {
+        query = query.ilike("email", cleanEmail);
+      }
+      const { data, error } = await query.maybeSingle();
+      if (error) {
+        console.warn("Error querying admin_users table:", error.message);
+        return null;
+      }
+      if (!data) {
+        return null;
+      }
+      return {
+        id: data.id,
+        auth_user_id: data.auth_user_id,
+        email: data.email,
+        name: data.name || "Admin User",
+        role: data.role || "LND_ADMIN",
+        is_active: Boolean(data.is_active),
+        created_at: data.created_at,
+        updated_at: data.updated_at
+      };
+    } catch (err) {
+      console.error("Exception verifying admin user:", err);
+      return null;
+    }
+  }
+  async function createAuditLog(payload) {
+    const client = getSupabaseClient();
+    try {
+      const { data: { user } } = await client.auth.getUser();
+      const adminEmail = user?.email || "admin@rupeek.com";
+      const adminName = user?.user_metadata?.name || user?.user_metadata?.full_name || adminEmail.split("@")[0];
+      const auditEntry = {
+        action: payload.action,
+        entity_type: payload.entity_type,
+        entity_id: String(payload.entity_id),
+        performed_by_email: adminEmail,
+        performed_by_name: adminName,
+        details: payload.details || {
+          previous_values: payload.previous_values || null,
+          new_values: payload.new_values || null
+        },
+        created_at: (/* @__PURE__ */ new Date()).toISOString()
+      };
+      const { error } = await client.from("audit_logs").insert([auditEntry]);
+      if (error) {
+        console.warn("Note: Could not write to public.audit_logs directly:", error.message);
+      }
+    } catch (err) {
+      console.warn("Audit logging exception (non-fatal):", err);
+    }
+  }
+  async function checkEmployeeUniqueness(employeeId, email, excludeId) {
+    const client = getSupabaseClient();
+    const cleanId = employeeId.trim().toUpperCase();
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      let query = client.from("employees").select("id, employee_id, email");
+      if (excludeId !== void 0 && excludeId !== null) {
+        query = query.neq("id", excludeId);
+      }
+      const { data, error } = await query.or(`employee_id.ilike.${cleanId},email.ilike.${cleanEmail}`);
+      if (error) {
+        console.error("Error checking employee uniqueness:", error);
+        throw error;
+      }
+      const matched = data || [];
+      const employeeIdExists = matched.some((e) => e.employee_id?.toUpperCase() === cleanId);
+      const emailExists = matched.some((e) => e.email?.toLowerCase() === cleanEmail);
+      return { employeeIdExists, emailExists };
+    } catch (err) {
+      console.error("Error during uniqueness check:", err);
+      throw err;
+    }
+  }
+  async function fetchAllExistingEmployeeIdentifiers() {
+    const client = getSupabaseClient();
+    const employeeIds = /* @__PURE__ */ new Set();
+    const emails = /* @__PURE__ */ new Set();
+    try {
+      let from = 0;
+      const pageSize = 1e3;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await client.from("employees").select("employee_id, email").range(from, from + pageSize - 1);
+        if (error) {
+          console.error("Error fetching employee identifiers:", error);
+          break;
+        }
+        if (!data || data.length === 0) {
+          hasMore = false;
+          break;
+        }
+        data.forEach((r) => {
+          if (r.employee_id) employeeIds.add(r.employee_id.trim().toUpperCase());
+          if (r.email) emails.add(r.email.trim().toLowerCase());
+        });
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          from += pageSize;
+        }
+      }
+    } catch (err) {
+      console.error("Exception fetching all identifiers:", err);
+    }
+    return { employeeIds, emails };
+  }
+  async function createEmployee(input) {
+    const client = getSupabaseClient();
+    const cleanId = input.employee_id.trim().toUpperCase();
+    const cleanEmail = input.email.trim().toLowerCase();
+    const cleanFullName = input.full_name.trim();
+    if (!cleanId) throw new Error("Employee ID is required.");
+    if (!cleanFullName) throw new Error("Full Name is required.");
+    if (!cleanEmail) throw new Error("Official Email is required.");
+    if (!/\S+@\S+\.\S+/.test(cleanEmail)) throw new Error("Please enter a valid official email format.");
+    if (!input.role_id) throw new Error("Please select a valid Designation.");
+    if (!input.location_id) throw new Error("Please select a valid Operating Location.");
+    const { employeeIdExists, emailExists } = await checkEmployeeUniqueness(cleanId, cleanEmail);
+    if (employeeIdExists) {
+      throw new Error(`Employee ID "${cleanId}" already exists in the system.`);
+    }
+    if (emailExists) {
+      throw new Error(`Official Email "${cleanEmail}" already exists in the system.`);
+    }
+    const payload = {
+      employee_id: cleanId,
+      full_name: cleanFullName,
+      email: cleanEmail,
+      mobile_number: input.mobile_number?.trim() || null,
+      role_id: Number(input.role_id),
+      location_id: Number(input.location_id),
+      reporting_manager_employee_id: input.reporting_manager_employee_id?.trim() || null,
+      reporting_manager_name: input.reporting_manager_name?.trim() || null,
+      employment_status: input.employment_status || "ACTIVE",
+      skillup_access: input.skillup_access || "ENABLED"
+    };
+    const { data, error } = await client.from("employees").insert([payload]).select("id, employee_id, full_name, email, mobile_number, role_id, location_id, employment_status, skillup_access, reporting_manager_employee_id, reporting_manager_name, created_at, updated_at").single();
+    if (error) {
+      console.error("Error inserting employee into public.employees:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "EMPLOYEE_CREATED",
+      entity_type: "EMPLOYEE",
+      entity_id: cleanId,
+      new_values: payload
+    });
+    return {
+      id: data.id,
+      employee_id: data.employee_id,
+      full_name: data.full_name,
+      email: data.email,
+      mobile_number: data.mobile_number,
+      role_id: data.role_id,
+      location_id: data.location_id,
+      employment_status: data.employment_status,
+      skillup_access: data.skillup_access,
+      reporting_manager_employee_id: data.reporting_manager_employee_id,
+      reporting_manager_name: data.reporting_manager_name,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function updateEmployee(id, input, previousRecord) {
+    const client = getSupabaseClient();
+    const cleanFullName = input.full_name.trim();
+    if (!cleanFullName) throw new Error("Full Name is required.");
+    if (!input.role_id) throw new Error("Please select a valid Designation.");
+    if (!input.location_id) throw new Error("Please select a valid Operating Location.");
+    const payload = {
+      full_name: cleanFullName,
+      mobile_number: input.mobile_number?.trim() || null,
+      role_id: Number(input.role_id),
+      location_id: Number(input.location_id),
+      reporting_manager_employee_id: input.reporting_manager_employee_id?.trim() || null,
+      reporting_manager_name: input.reporting_manager_name?.trim() || null,
+      employment_status: input.employment_status,
+      skillup_access: input.skillup_access,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const { data, error } = await client.from("employees").update(payload).eq("id", id).select("id, employee_id, full_name, email, mobile_number, role_id, location_id, employment_status, skillup_access, reporting_manager_employee_id, reporting_manager_name, created_at, updated_at").single();
+    if (error) {
+      console.error("Error updating employee in public.employees:", error);
+      throw new Error(`Database update error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "EMPLOYEE_UPDATED",
+      entity_type: "EMPLOYEE",
+      entity_id: previousRecord.employee_id,
+      previous_values: {
+        full_name: previousRecord.full_name,
+        mobile_number: previousRecord.mobile_number,
+        role_id: previousRecord.role_id,
+        location_id: previousRecord.location_id,
+        reporting_manager_name: previousRecord.reporting_manager_name,
+        reporting_manager_employee_id: previousRecord.reporting_manager_employee_id,
+        employment_status: previousRecord.employment_status,
+        skillup_access: previousRecord.skillup_access
+      },
+      new_values: payload
+    });
+    return {
+      id: data.id,
+      employee_id: data.employee_id,
+      full_name: data.full_name,
+      email: data.email,
+      mobile_number: data.mobile_number,
+      role_id: data.role_id,
+      location_id: data.location_id,
+      employment_status: data.employment_status,
+      skillup_access: data.skillup_access,
+      reporting_manager_employee_id: data.reporting_manager_employee_id,
+      reporting_manager_name: data.reporting_manager_name,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function toggleSkillUpAccess(employee, newAccess) {
+    const client = getSupabaseClient();
+    const targetId = employee.id;
+    if (!targetId) {
+      throw new Error("Employee ID identifier missing for access update.");
+    }
+    const { data, error } = await client.from("employees").update({
+      skillup_access: newAccess,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", targetId).select("id, employee_id, full_name, email, mobile_number, role_id, location_id, employment_status, skillup_access, reporting_manager_employee_id, reporting_manager_name, created_at, updated_at").single();
+    if (error) {
+      console.error("Error toggling SkillUp access in public.employees:", error);
+      throw new Error(`Failed to change SkillUp access: ${error.message}`);
+    }
+    const actionName = newAccess === "ENABLED" ? "SKILLUP_ACCESS_ENABLED" : "SKILLUP_ACCESS_DISABLED";
+    await createAuditLog({
+      action: actionName,
+      entity_type: "EMPLOYEE",
+      entity_id: employee.employee_id,
+      previous_values: { skillup_access: employee.skillup_access },
+      new_values: { skillup_access: newAccess },
+      details: {
+        reason: `Admin updated SkillUp learning access to ${newAccess}`,
+        employment_status_preserved: employee.employment_status
+      }
+    });
+    return {
+      id: data.id,
+      employee_id: data.employee_id,
+      full_name: data.full_name,
+      email: data.email,
+      mobile_number: data.mobile_number,
+      role_id: data.role_id,
+      location_id: data.location_id,
+      employment_status: data.employment_status,
+      skillup_access: data.skillup_access,
+      reporting_manager_employee_id: data.reporting_manager_employee_id,
+      reporting_manager_name: data.reporting_manager_name,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function insertBulkEmployees(validRows) {
+    const client = getSupabaseClient();
+    const summary = {
+      totalProcessed: validRows.length,
+      successfullyImported: 0,
+      rejectedCount: 0,
+      errors: []
+    };
+    if (validRows.length === 0) {
+      return summary;
+    }
+    const { employeeIds: existingIds, emails: existingEmails } = await fetchAllExistingEmployeeIdentifiers();
+    const toInsert = [];
+    for (const row of validRows) {
+      const cleanId = row.employee_id.trim().toUpperCase();
+      const cleanEmail = row.email.trim().toLowerCase();
+      if (existingIds.has(cleanId)) {
+        summary.rejectedCount++;
+        summary.errors.push({
+          employee_id: cleanId,
+          error: `Employee ID "${cleanId}" already exists in public.employees (Protected).`
+        });
+        continue;
+      }
+      if (existingEmails.has(cleanEmail)) {
+        summary.rejectedCount++;
+        summary.errors.push({
+          employee_id: cleanId,
+          error: `Email "${cleanEmail}" already exists in public.employees (Protected).`
+        });
+        continue;
+      }
+      if (!row.role_id || !row.location_id) {
+        summary.rejectedCount++;
+        summary.errors.push({
+          employee_id: cleanId,
+          error: "Invalid or unresolved Role/Location reference."
+        });
+        continue;
+      }
+      toInsert.push({
+        employee_id: cleanId,
+        full_name: row.full_name.trim(),
+        email: cleanEmail,
+        mobile_number: row.mobile_number ? row.mobile_number.trim() : null,
+        role_id: row.role_id,
+        location_id: row.location_id,
+        reporting_manager_employee_id: row.reporting_manager_employee_id ? row.reporting_manager_employee_id.trim() : null,
+        reporting_manager_name: row.reporting_manager_name ? row.reporting_manager_name.trim() : null,
+        employment_status: row.employment_status || "ACTIVE",
+        skillup_access: row.skillup_access || "ENABLED"
+      });
+      existingIds.add(cleanId);
+      existingEmails.add(cleanEmail);
+    }
+    if (toInsert.length === 0) {
+      return summary;
+    }
+    const { data, error } = await client.from("employees").insert(toInsert).select("id, employee_id");
+    if (error) {
+      console.error("Atomic bulk import failed - transaction rolled back completely:", error);
+      toInsert.forEach((item) => {
+        summary.rejectedCount++;
+        summary.errors.push({
+          employee_id: item.employee_id,
+          error: `Database transaction aborted: ${error.message}`
+        });
+      });
+      summary.successfullyImported = 0;
+      throw new Error(`Bulk import transaction failed and was rolled back: ${error.message}`);
+    }
+    summary.successfullyImported = (data || []).length;
+    if (summary.successfullyImported > 0) {
+      await createAuditLog({
+        action: "EMPLOYEE_BULK_IMPORT",
+        entity_type: "EMPLOYEE",
+        entity_id: `BATCH_${Date.now()}`,
+        details: {
+          totalProcessed: summary.totalProcessed,
+          importedCount: summary.successfullyImported,
+          rejectedCount: summary.rejectedCount,
+          atomic_transaction: true
+        }
+      });
+    }
+    return summary;
+  }
+  async function fetchCourseCategories() {
+    const client = getSupabaseClient();
+    try {
+      const { data, error } = await client.from("courses").select("category");
+      if (error || !data) return [];
+      const set = /* @__PURE__ */ new Set();
+      data.forEach((r) => {
+        if (r.category && typeof r.category === "string") {
+          set.add(r.category.trim());
+        }
+      });
+      return Array.from(set).sort();
+    } catch {
+      return [];
+    }
+  }
+  async function fetchCourses(filters) {
+    const client = getSupabaseClient();
+    const { search, category, status, sortBy, sortOrder, page, pageSize } = filters;
+    let query = client.from("courses").select("id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at", { count: "exact" });
+    if (search && search.trim()) {
+      const q = search.trim();
+      query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,category.ilike.%${q}%,code.ilike.%${q}%`);
+    }
+    if (category && category !== "ALL") {
+      query = query.eq("category", category);
+    }
+    if (status && status !== "ALL") {
+      if (status === "PUBLISHED" || status === "ACTIVE") {
+        query = query.eq("is_active", true);
+      } else if (status === "DRAFT" || status === "INACTIVE") {
+        query = query.eq("is_active", false);
+      }
+    }
+    const sortColumn = sortBy || "created_at";
+    const ascending = sortOrder === "asc";
+    query = query.order(sortColumn, { ascending, nullsFirst: false });
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    query = query.range(from, to);
+    const { data, count, error } = await query;
+    if (error) {
+      console.error("Error fetching courses from public.courses:", error);
+      throw error;
+    }
+    const rawCourses = data || [];
+    if (rawCourses.length === 0) {
+      return { courses: [], totalCount: count ?? 0 };
+    }
+    const courseIds = rawCourses.map((c) => c.id);
+    let moduleCountMap = /* @__PURE__ */ new Map();
+    let moduleIds = [];
+    try {
+      const { data: modulesData } = await client.from("modules").select("id, course_id").in("course_id", courseIds);
+      if (modulesData) {
+        modulesData.forEach((m) => {
+          moduleCountMap.set(m.course_id, (moduleCountMap.get(m.course_id) || 0) + 1);
+          moduleIds.push(m.id);
+        });
+      }
+    } catch (err) {
+      console.warn("Could not fetch module counts:", err);
+    }
+    let lessonCountMap = /* @__PURE__ */ new Map();
+    if (moduleIds.length > 0) {
+      try {
+        const { data: lessonsData } = await client.from("lessons").select("id, module_id").in("module_id", moduleIds);
+        if (lessonsData) {
+          lessonsData.forEach((l) => {
+            lessonCountMap.set(l.module_id, (lessonCountMap.get(l.module_id) || 0) + 1);
+          });
+        }
+      } catch (err) {
+        console.warn("Could not fetch lesson counts:", err);
+      }
+    }
+    let quizCountMap = /* @__PURE__ */ new Map();
+    try {
+      const { data: quizzesData } = await client.from("quizzes").select("id, course_id, module_id").or(`course_id.in.(${courseIds.join(",")})${moduleIds.length ? `,module_id.in.(${moduleIds.join(",")})` : ""}`);
+      if (quizzesData) {
+        quizzesData.forEach((q) => {
+          if (q.course_id) {
+            quizCountMap.set(q.course_id, (quizCountMap.get(q.course_id) || 0) + 1);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("Could not fetch quiz counts:", err);
+    }
+    const courses = rawCourses.map((c) => {
+      const mCount = moduleCountMap.get(c.id) || 0;
+      return {
+        id: c.id,
+        title: c.title,
+        code: c.code,
+        description: c.description,
+        category: c.category || "General",
+        difficulty: c.difficulty || "Intermediate",
+        estimated_duration_minutes: c.estimated_duration_minutes || 30,
+        thumbnail_url: c.thumbnail_url,
+        is_active: Boolean(c.is_active),
+        status: c.is_active ? "PUBLISHED" : c.status || "DRAFT",
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+        modules_count: mCount,
+        lessons_count: Array.from(lessonCountMap.entries()).reduce((sum, [, count2]) => sum + count2, 0),
+        quizzes_count: quizCountMap.get(c.id) || 0
+      };
+    });
+    return {
+      courses,
+      totalCount: count ?? courses.length
+    };
+  }
+  async function fetchCourseDetail(courseId) {
+    const client = getSupabaseClient();
+    const { data: courseData, error: courseErr } = await client.from("courses").select("id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at").eq("id", courseId).maybeSingle();
+    if (courseErr || !courseData) {
+      console.error("Error fetching course detail from public.courses:", courseErr);
+      return null;
+    }
+    const { data: rawModules, error: modErr } = await client.from("modules").select("id, course_id, title, description, sequence_order, is_active, created_at, updated_at").eq("course_id", courseId).order("sequence_order", { ascending: true, nullsFirst: false });
+    if (modErr) {
+      console.warn("Error fetching modules:", modErr);
+    }
+    const modulesList = rawModules || [];
+    const moduleIds = modulesList.map((m) => m.id);
+    let lessonsByModule = /* @__PURE__ */ new Map();
+    if (moduleIds.length > 0) {
+      const { data: rawLessons, error: lessErr } = await client.from("lessons").select("id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at").in("module_id", moduleIds).order("sequence_order", { ascending: true, nullsFirst: false });
+      if (lessErr) {
+        console.warn("Error fetching lessons:", lessErr);
+      }
+      (rawLessons || []).forEach((l) => {
+        const list = lessonsByModule.get(l.module_id) || [];
+        list.push({
+          id: l.id,
+          module_id: l.module_id,
+          title: l.title,
+          content_type: l.content_type || "TEXT",
+          content_text: l.content_text,
+          video_url: l.video_url,
+          pdf_url: l.pdf_url,
+          duration_minutes: l.duration_minutes || 5,
+          sequence_order: l.sequence_order || 1,
+          is_active: l.is_active !== void 0 ? l.is_active : true,
+          created_at: l.created_at,
+          updated_at: l.updated_at
+        });
+        lessonsByModule.set(l.module_id, list);
+      });
+    }
+    let quizzesByModule = /* @__PURE__ */ new Map();
+    let quizzesForCourse = [];
+    try {
+      let quizQuery = client.from("quizzes").select("id, course_id, module_id, title, description, passing_score, time_limit_minutes, is_active, created_at, updated_at");
+      if (moduleIds.length > 0) {
+        quizQuery = quizQuery.or(`course_id.eq.${courseId},module_id.in.(${moduleIds.join(",")})`);
+      } else {
+        quizQuery = quizQuery.eq("course_id", courseId);
+      }
+      const { data: rawQuizzes, error: qErr } = await quizQuery;
+      if (qErr) {
+        console.warn("Error fetching quizzes:", qErr);
+      }
+      const quizzes = rawQuizzes || [];
+      const quizIds = quizzes.map((q) => q.id);
+      let questionsByQuiz = /* @__PURE__ */ new Map();
+      if (quizIds.length > 0) {
+        const { data: rawQuestions } = await client.from("quiz_questions").select("id, quiz_id, question_text, question_type, points, explanation, sequence_order, created_at").in("quiz_id", quizIds).order("sequence_order", { ascending: true, nullsFirst: false });
+        const questionIds = (rawQuestions || []).map((q) => q.id);
+        let optionsByQuestion = /* @__PURE__ */ new Map();
+        if (questionIds.length > 0) {
+          const { data: rawOptions } = await client.from("quiz_options").select("id, question_id, option_text, is_correct, sequence_order, created_at").in("question_id", questionIds).order("sequence_order", { ascending: true, nullsFirst: false });
+          (rawOptions || []).forEach((opt) => {
+            const list = optionsByQuestion.get(opt.question_id) || [];
+            list.push({
+              id: opt.id,
+              question_id: opt.question_id,
+              option_text: opt.option_text,
+              is_correct: Boolean(opt.is_correct),
+              sequence_order: opt.sequence_order || 1,
+              created_at: opt.created_at
+            });
+            optionsByQuestion.set(opt.question_id, list);
+          });
+        }
+        (rawQuestions || []).forEach((q) => {
+          const list = questionsByQuiz.get(q.quiz_id) || [];
+          list.push({
+            id: q.id,
+            quiz_id: q.quiz_id,
+            question_text: q.question_text,
+            question_type: q.question_type || "SINGLE_CHOICE",
+            points: q.points || 1,
+            explanation: q.explanation,
+            sequence_order: q.sequence_order || 1,
+            created_at: q.created_at,
+            options: optionsByQuestion.get(q.id) || []
+          });
+          questionsByQuiz.set(q.quiz_id, list);
+        });
+      }
+      quizzes.forEach((q) => {
+        const fullQuiz = {
+          id: q.id,
+          course_id: q.course_id,
+          module_id: q.module_id,
+          title: q.title,
+          description: q.description,
+          passing_score: q.passing_score ?? 70,
+          time_limit_minutes: q.time_limit_minutes,
+          is_active: q.is_active !== void 0 ? q.is_active : true,
+          created_at: q.created_at,
+          updated_at: q.updated_at,
+          questions: questionsByQuiz.get(q.id) || []
+        };
+        if (q.module_id) {
+          const mList = quizzesByModule.get(q.module_id) || [];
+          mList.push(fullQuiz);
+          quizzesByModule.set(q.module_id, mList);
+        } else {
+          quizzesForCourse.push(fullQuiz);
+        }
+      });
+    } catch (err) {
+      console.warn("Quiz hierarchy query warning:", err);
+    }
+    const modules = modulesList.map((m) => ({
+      id: m.id,
+      course_id: m.course_id,
+      title: m.title,
+      description: m.description,
+      sequence_order: m.sequence_order || 1,
+      is_active: m.is_active !== void 0 ? m.is_active : true,
+      created_at: m.created_at,
+      updated_at: m.updated_at,
+      lessons: lessonsByModule.get(m.id) || [],
+      quizzes: quizzesByModule.get(m.id) || []
+    }));
+    const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
+    const totalQuizzes = modules.reduce((sum, m) => sum + (m.quizzes?.length || 0), 0) + quizzesForCourse.length;
+    return {
+      id: courseData.id,
+      title: courseData.title,
+      code: courseData.code,
+      description: courseData.description,
+      category: courseData.category || "General",
+      difficulty: courseData.difficulty || "Intermediate",
+      estimated_duration_minutes: courseData.estimated_duration_minutes || 30,
+      thumbnail_url: courseData.thumbnail_url,
+      is_active: Boolean(courseData.is_active),
+      status: courseData.is_active ? "PUBLISHED" : courseData.status || "DRAFT",
+      created_at: courseData.created_at,
+      updated_at: courseData.updated_at,
+      modules_count: modules.length,
+      lessons_count: totalLessons,
+      quizzes_count: totalQuizzes,
+      modules
+    };
+  }
+  async function createCourse(input) {
+    const client = getSupabaseClient();
+    const cleanTitle = input.title.trim();
+    if (!cleanTitle) throw new Error("Course Title is required.");
+    const payload = {
+      title: cleanTitle,
+      code: input.code?.trim() || null,
+      description: input.description?.trim() || "",
+      category: input.category?.trim() || "General",
+      difficulty: input.difficulty || "Intermediate",
+      estimated_duration_minutes: Number(input.estimated_duration_minutes) || 30,
+      thumbnail_url: input.thumbnail_url?.trim() || null,
+      is_active: false,
+      status: "DRAFT"
+    };
+    const { data, error } = await client.from("courses").insert([payload]).select("id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at").single();
+    if (error) {
+      console.error("Error inserting course into public.courses:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "COURSE_CREATED",
+      entity_type: "COURSE",
+      entity_id: String(data.id),
+      new_values: payload
+    });
+    return {
+      id: data.id,
+      title: data.title,
+      code: data.code,
+      description: data.description,
+      category: data.category,
+      difficulty: data.difficulty,
+      estimated_duration_minutes: data.estimated_duration_minutes,
+      thumbnail_url: data.thumbnail_url,
+      is_active: Boolean(data.is_active),
+      status: data.is_active ? "PUBLISHED" : "DRAFT",
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      modules_count: 0,
+      lessons_count: 0,
+      quizzes_count: 0,
+      modules: []
+    };
+  }
+  async function updateCourse(courseId, input, previousRecord) {
+    const client = getSupabaseClient();
+    const cleanTitle = input.title?.trim();
+    if (cleanTitle !== void 0 && !cleanTitle) throw new Error("Course Title cannot be empty.");
+    const payload = {
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (cleanTitle !== void 0) payload.title = cleanTitle;
+    if (input.code !== void 0) payload.code = input.code?.trim() || null;
+    if (input.description !== void 0) payload.description = input.description?.trim() || "";
+    if (input.category !== void 0) payload.category = input.category?.trim() || "General";
+    if (input.difficulty !== void 0) payload.difficulty = input.difficulty;
+    if (input.estimated_duration_minutes !== void 0) payload.estimated_duration_minutes = Number(input.estimated_duration_minutes);
+    if (input.thumbnail_url !== void 0) payload.thumbnail_url = input.thumbnail_url?.trim() || null;
+    if (input.is_active !== void 0) payload.is_active = input.is_active;
+    if (input.status !== void 0) payload.status = input.status;
+    const { data, error } = await client.from("courses").update(payload).eq("id", courseId).select("id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at").single();
+    if (error) {
+      console.error("Error updating course in public.courses:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "COURSE_UPDATED",
+      entity_type: "COURSE",
+      entity_id: String(courseId),
+      previous_values: previousRecord ? {
+        title: previousRecord.title,
+        category: previousRecord.category,
+        is_active: previousRecord.is_active
+      } : null,
+      new_values: payload
+    });
+    return {
+      id: data.id,
+      title: data.title,
+      code: data.code,
+      description: data.description,
+      category: data.category,
+      difficulty: data.difficulty,
+      estimated_duration_minutes: data.estimated_duration_minutes,
+      thumbnail_url: data.thumbnail_url,
+      is_active: Boolean(data.is_active),
+      status: data.is_active ? "PUBLISHED" : data.status || "DRAFT",
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function toggleCoursePublish(courseId, publish, currentCourse) {
+    const client = getSupabaseClient();
+    if (publish) {
+      const full = await fetchCourseDetail(courseId);
+      if (!full || !full.modules || full.modules.length === 0) {
+        throw new Error("A course must have at least one module before it can be published.");
+      }
+      const hasContent = full.modules.some((m) => m.lessons && m.lessons.length > 0 || m.quizzes && m.quizzes.length > 0);
+      if (!hasContent) {
+        throw new Error("A course must contain at least one lesson or quiz before publishing.");
+      }
+    }
+    const payload = {
+      is_active: publish,
+      status: publish ? "PUBLISHED" : "DRAFT",
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    const { data, error } = await client.from("courses").update(payload).eq("id", courseId).select("id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at").single();
+    if (error) {
+      console.error("Error toggling course publish status:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: publish ? "COURSE_PUBLISHED" : "COURSE_UPDATED",
+      entity_type: "COURSE",
+      entity_id: String(courseId),
+      previous_values: { is_active: currentCourse.is_active, status: currentCourse.status },
+      new_values: payload
+    });
+    return {
+      ...currentCourse,
+      is_active: Boolean(data.is_active),
+      status: data.is_active ? "PUBLISHED" : "DRAFT",
+      updated_at: data.updated_at
+    };
+  }
+  async function createModule(courseId, input) {
+    const client = getSupabaseClient();
+    const cleanTitle = input.title.trim();
+    if (!cleanTitle) throw new Error("Module Title is required.");
+    const payload = {
+      course_id: courseId,
+      title: cleanTitle,
+      description: input.description?.trim() || "",
+      sequence_order: input.sequence_order || 1,
+      is_active: true
+    };
+    const { data, error } = await client.from("modules").insert([payload]).select("id, course_id, title, description, sequence_order, is_active, created_at, updated_at").single();
+    if (error) {
+      console.error("Error creating module in public.modules:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "MODULE_CREATED",
+      entity_type: "MODULE",
+      entity_id: String(data.id),
+      details: { course_id: courseId, title: cleanTitle }
+    });
+    return {
+      id: data.id,
+      course_id: data.course_id,
+      title: data.title,
+      description: data.description,
+      sequence_order: data.sequence_order,
+      is_active: data.is_active,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      lessons: [],
+      quizzes: []
+    };
+  }
+  async function updateModule(moduleId, input) {
+    const client = getSupabaseClient();
+    const payload = {
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (input.title !== void 0) payload.title = input.title.trim();
+    if (input.description !== void 0) payload.description = input.description.trim();
+    if (input.sequence_order !== void 0) payload.sequence_order = input.sequence_order;
+    const { data, error } = await client.from("modules").update(payload).eq("id", moduleId).select("id, course_id, title, description, sequence_order, is_active, created_at, updated_at").single();
+    if (error) {
+      console.error("Error updating module in public.modules:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "MODULE_UPDATED",
+      entity_type: "MODULE",
+      entity_id: String(moduleId),
+      new_values: payload
+    });
+    return {
+      id: data.id,
+      course_id: data.course_id,
+      title: data.title,
+      description: data.description,
+      sequence_order: data.sequence_order,
+      is_active: data.is_active,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function reorderModules(moduleOrders) {
+    const client = getSupabaseClient();
+    for (const item of moduleOrders) {
+      await client.from("modules").update({ sequence_order: item.sequence_order, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", item.id);
+    }
+  }
+  async function createLesson(moduleId, input) {
+    const client = getSupabaseClient();
+    const cleanTitle = input.title.trim();
+    if (!cleanTitle) throw new Error("Lesson Title is required.");
+    const payload = {
+      module_id: moduleId,
+      title: cleanTitle,
+      content_type: input.content_type || "TEXT",
+      content_text: input.content_text || "",
+      video_url: input.video_url?.trim() || null,
+      pdf_url: input.pdf_url?.trim() || null,
+      duration_minutes: Number(input.duration_minutes) || 5,
+      sequence_order: input.sequence_order || 1,
+      is_active: true
+    };
+    const { data, error } = await client.from("lessons").insert([payload]).select("id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at").single();
+    if (error) {
+      console.error("Error creating lesson in public.lessons:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "LESSON_CREATED",
+      entity_type: "LESSON",
+      entity_id: String(data.id),
+      details: { module_id: moduleId, title: cleanTitle, content_type: input.content_type }
+    });
+    return {
+      id: data.id,
+      module_id: data.module_id,
+      title: data.title,
+      content_type: data.content_type,
+      content_text: data.content_text,
+      video_url: data.video_url,
+      pdf_url: data.pdf_url,
+      duration_minutes: data.duration_minutes,
+      sequence_order: data.sequence_order,
+      is_active: data.is_active,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function updateLesson(lessonId, input) {
+    const client = getSupabaseClient();
+    const payload = {
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (input.title !== void 0) payload.title = input.title.trim();
+    if (input.content_type !== void 0) payload.content_type = input.content_type;
+    if (input.content_text !== void 0) payload.content_text = input.content_text;
+    if (input.video_url !== void 0) payload.video_url = input.video_url?.trim() || null;
+    if (input.pdf_url !== void 0) payload.pdf_url = input.pdf_url?.trim() || null;
+    if (input.duration_minutes !== void 0) payload.duration_minutes = Number(input.duration_minutes);
+    if (input.sequence_order !== void 0) payload.sequence_order = input.sequence_order;
+    if (input.is_active !== void 0) payload.is_active = input.is_active;
+    const { data, error } = await client.from("lessons").update(payload).eq("id", lessonId).select("id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at").single();
+    if (error) {
+      console.error("Error updating lesson in public.lessons:", error);
+      throw new Error(`Database error: ${error.message}`);
+    }
+    await createAuditLog({
+      action: "LESSON_UPDATED",
+      entity_type: "LESSON",
+      entity_id: String(lessonId),
+      new_values: payload
+    });
+    return {
+      id: data.id,
+      module_id: data.module_id,
+      title: data.title,
+      content_type: data.content_type,
+      content_text: data.content_text,
+      video_url: data.video_url,
+      pdf_url: data.pdf_url,
+      duration_minutes: data.duration_minutes,
+      sequence_order: data.sequence_order,
+      is_active: data.is_active,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+  }
+  async function reorderLessons(lessonOrders) {
+    const client = getSupabaseClient();
+    for (const item of lessonOrders) {
+      await client.from("lessons").update({ sequence_order: item.sequence_order, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", item.id);
+    }
+  }
+  async function saveQuizWithQuestions(input) {
+    const client = getSupabaseClient();
+    const cleanTitle = input.title.trim();
+    if (!cleanTitle) throw new Error("Quiz Title is required.");
+    if (!input.questions || input.questions.length === 0) {
+      throw new Error("A quiz must contain at least one question.");
+    }
+    for (let i = 0; i < input.questions.length; i++) {
+      const q = input.questions[i];
+      if (!q.question_text || !q.question_text.trim()) {
+        throw new Error(`Question #${i + 1} text cannot be empty.`);
+      }
+      if (!q.options || q.options.length < 2) {
+        throw new Error(`Question #${i + 1} must have at least 2 answer options.`);
+      }
+      const hasCorrect = q.options.some((opt) => opt.is_correct);
+      if (!hasCorrect) {
+        throw new Error(`Question #${i + 1} must have at least one marked correct answer.`);
+      }
+      const optionTexts = q.options.map((opt) => opt.option_text.trim().toLowerCase());
+      const uniqueTexts = new Set(optionTexts);
+      if (uniqueTexts.size < optionTexts.length) {
+        throw new Error(`Question #${i + 1} has duplicate answer options.`);
+      }
+    }
+    let quizId = input.id;
+    const isNewQuiz = !quizId;
+    const quizPayload = {
+      title: cleanTitle,
+      description: input.description?.trim() || "",
+      passing_score: Number(input.passing_score) || 70,
+      time_limit_minutes: input.time_limit_minutes ? Number(input.time_limit_minutes) : null,
+      is_active: true,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (input.course_id) quizPayload.course_id = input.course_id;
+    if (input.module_id) quizPayload.module_id = input.module_id;
+    if (isNewQuiz) {
+      const { data: newQuiz, error: createQErr } = await client.from("quizzes").insert([quizPayload]).select("id, course_id, module_id, title, description, passing_score, time_limit_minutes, is_active, created_at, updated_at").single();
+      if (createQErr) {
+        console.error("Error creating quiz:", createQErr);
+        throw new Error(`Database error: ${createQErr.message}`);
+      }
+      quizId = newQuiz.id;
+    } else {
+      const { error: updateQErr } = await client.from("quizzes").update(quizPayload).eq("id", quizId);
+      if (updateQErr) {
+        console.error("Error updating quiz:", updateQErr);
+        throw new Error(`Database error: ${updateQErr.message}`);
+      }
+    }
+    if (!isNewQuiz && quizId) {
+      try {
+        const { data: existingQuestions } = await client.from("quiz_questions").select("id").eq("quiz_id", quizId);
+        const qIds = (existingQuestions || []).map((q) => q.id);
+        if (qIds.length > 0) {
+          await client.from("quiz_options").delete().in("question_id", qIds);
+          await client.from("quiz_questions").delete().eq("quiz_id", quizId);
+        }
+      } catch (e) {
+        console.warn("Note during question sync:", e);
+      }
+    }
+    const createdQuestions = [];
+    for (let i = 0; i < input.questions.length; i++) {
+      const qInput = input.questions[i];
+      const { data: questionData, error: qInsertErr } = await client.from("quiz_questions").insert([{
+        quiz_id: quizId,
+        question_text: qInput.question_text.trim(),
+        question_type: qInput.question_type || "SINGLE_CHOICE",
+        points: qInput.points || 1,
+        explanation: qInput.explanation?.trim() || null,
+        sequence_order: i + 1
+      }]).select("id, quiz_id, question_text, question_type, points, explanation, sequence_order, created_at").single();
+      if (qInsertErr || !questionData) {
+        console.error("Error inserting question:", qInsertErr);
+        throw new Error(`Error saving question: ${qInsertErr?.message}`);
+      }
+      const optionsPayload = qInput.options.map((opt, optIdx) => ({
+        question_id: questionData.id,
+        option_text: opt.option_text.trim(),
+        is_correct: Boolean(opt.is_correct),
+        sequence_order: optIdx + 1
+      }));
+      const { data: optionsData, error: optInsertErr } = await client.from("quiz_options").insert(optionsPayload).select("id, question_id, option_text, is_correct, sequence_order, created_at");
+      if (optInsertErr) {
+        console.error("Error inserting quiz options:", optInsertErr);
+        throw new Error(`Error saving options: ${optInsertErr.message}`);
+      }
+      createdQuestions.push({
+        id: questionData.id,
+        quiz_id: questionData.quiz_id,
+        question_text: questionData.question_text,
+        question_type: questionData.question_type,
+        points: questionData.points,
+        explanation: questionData.explanation,
+        sequence_order: questionData.sequence_order,
+        created_at: questionData.created_at,
+        options: optionsData || []
+      });
+    }
+    await createAuditLog({
+      action: isNewQuiz ? "QUIZ_CREATED" : "QUIZ_UPDATED",
+      entity_type: "QUIZ",
+      entity_id: String(quizId),
+      details: {
+        title: cleanTitle,
+        questionsCount: createdQuestions.length,
+        passing_score: input.passing_score
+      }
+    });
+    return {
+      id: quizId,
+      course_id: input.course_id,
+      module_id: input.module_id,
+      title: cleanTitle,
+      description: input.description,
+      passing_score: input.passing_score,
+      time_limit_minutes: input.time_limit_minutes,
+      is_active: true,
+      questions: createdQuestions
+    };
   }
 
   // src/context/AuthContext.tsx
@@ -33274,13 +34346,14 @@ ${suffix}`;
     const [error, setError] = (0, import_react.useState)(null);
     const checkAdminAuthorization = (0, import_react.useCallback)(async (userEmail, authUser) => {
       try {
-        const admin = await verifyAdminUser(userEmail);
+        const authUserId = authUser?.id;
+        const admin = await verifyAdminUser(userEmail, authUserId);
         if (admin && admin.is_active) {
           setAdminProfile(admin);
           setError(null);
           return true;
         } else {
-          console.warn(`Access denied for ${userEmail}: Not an active admin.`);
+          console.warn(`Access denied for ${userEmail}: Not an active admin in public.admin_users.`);
           setAdminProfile(null);
           setError("You do not have administrator access.");
           const client = getSupabaseClient();
@@ -33308,13 +34381,9 @@ ${suffix}`;
             setUser(existingSession.user);
             await checkAdminAuthorization(existingSession.user.email, existingSession.user);
           } else {
-            const savedEmail = localStorage.getItem("skillup_active_admin_email");
-            if (savedEmail) {
-              const admin = await verifyAdminUser(savedEmail);
-              if (admin && isMounted) {
-                setAdminProfile(admin);
-              }
-            }
+            setUser(null);
+            setSession(null);
+            setAdminProfile(null);
           }
         } catch (err) {
           console.error("Error checking auth session:", err);
@@ -33333,7 +34402,6 @@ ${suffix}`;
           setUser(null);
           setSession(null);
           setAdminProfile(null);
-          localStorage.removeItem("skillup_active_admin_email");
         }
       });
       return () => {
@@ -33346,48 +34414,36 @@ ${suffix}`;
       setError(null);
       const client = getSupabaseClient();
       const cleanEmail = email.trim().toLowerCase();
-      try {
-        if (password) {
-          const { data, error: signInError } = await client.auth.signInWithPassword({
-            email: cleanEmail,
-            password
-          });
-          if (signInError) {
-            console.warn("Supabase signInWithPassword notice:", signInError.message);
-            const adminCheck = await verifyAdminUser(cleanEmail);
-            if (adminCheck && adminCheck.is_active) {
-              setAdminProfile(adminCheck);
-              localStorage.setItem("skillup_active_admin_email", cleanEmail);
-              setIsLoading(false);
-              return { success: true };
-            }
-            setError(signInError.message || "Invalid email or password.");
-            setIsLoading(false);
-            return { success: false, error: signInError.message };
-          }
-          if (data.user?.email) {
-            setUser(data.user);
-            setSession(data.session);
-            const isAuthorized = await checkAdminAuthorization(data.user.email, data.user);
-            setIsLoading(false);
-            if (!isAuthorized) {
-              return { success: false, error: "You do not have administrator access." };
-            }
-            localStorage.setItem("skillup_active_admin_email", cleanEmail);
-            return { success: true };
-          }
-        }
-        const admin = await verifyAdminUser(cleanEmail);
-        if (!admin || !admin.is_active) {
-          const errMsg = "You do not have administrator access.";
-          setError(errMsg);
-          setIsLoading(false);
-          return { success: false, error: errMsg };
-        }
-        setAdminProfile(admin);
-        localStorage.setItem("skillup_active_admin_email", cleanEmail);
+      if (!cleanEmail || !password) {
+        const errMsg = "Email and password are required.";
+        setError(errMsg);
         setIsLoading(false);
-        return { success: true };
+        return { success: false, error: errMsg };
+      }
+      try {
+        const { data, error: signInError } = await client.auth.signInWithPassword({
+          email: cleanEmail,
+          password
+        });
+        if (signInError) {
+          console.warn("Supabase signInWithPassword failed:", signInError.message);
+          setError(signInError.message || "Invalid email or password.");
+          setIsLoading(false);
+          return { success: false, error: signInError.message };
+        }
+        if (data.user?.email) {
+          setUser(data.user);
+          setSession(data.session);
+          const isAuthorized = await checkAdminAuthorization(data.user.email, data.user);
+          setIsLoading(false);
+          if (!isAuthorized) {
+            return { success: false, error: "You do not have administrator access." };
+          }
+          return { success: true };
+        }
+        setError("Authentication failed. No user returned.");
+        setIsLoading(false);
+        return { success: false, error: "Authentication failed." };
       } catch (err) {
         console.error("Login exception:", err);
         const errMsg = err?.message || "Authentication failed. Please check your credentials.";
@@ -33407,17 +34463,18 @@ ${suffix}`;
         setUser(null);
         setSession(null);
         setAdminProfile(null);
-        localStorage.removeItem("skillup_active_admin_email");
         setIsLoading(false);
       }
     };
     const refreshAdminSession = async () => {
-      if (adminProfile?.email) {
-        await checkAdminAuthorization(adminProfile.email);
+      if (user?.email) {
+        await checkAdminAuthorization(user.email, user);
       }
     };
     const isAuthenticated = Boolean(adminProfile && adminProfile.is_active);
     const isSuperAdmin = adminProfile?.role === "SUPER_ADMIN";
+    const canManageEmployees = adminProfile?.role === "SUPER_ADMIN" || adminProfile?.role === "LND_ADMIN";
+    const canManageAccess = adminProfile?.role === "SUPER_ADMIN" || adminProfile?.role === "LND_ADMIN";
     return /* @__PURE__ */ import_react.default.createElement(
       AuthContext.Provider,
       {
@@ -33431,7 +34488,9 @@ ${suffix}`;
           login,
           logout,
           refreshAdminSession,
-          isSuperAdmin
+          isSuperAdmin,
+          canManageEmployees,
+          canManageAccess
         }
       },
       children
@@ -33556,7 +34615,6 @@ ${suffix}`;
       {
         label: "Employees",
         route: "/admin/employees",
-        badge: "813",
         icon: /* @__PURE__ */ import_react4.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react4.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" }))
       },
       {
@@ -33617,7 +34675,7 @@ ${suffix}`;
           item.badge && /* @__PURE__ */ import_react4.default.createElement("span", { className: `text-[10px] font-bold px-2 py-0.5 rounded-full ${isActive ? "bg-white/20 text-white" : "bg-slate-800 text-slate-300"}` }, item.badge)
         );
       })),
-      /* @__PURE__ */ import_react4.default.createElement("div", { className: "p-3.5 border-t border-slate-800/80 bg-[#071322] shrink-0" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "flex items-center gap-3 p-2 rounded-xl bg-slate-900/60 border border-slate-800 mb-3" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "w-8 h-8 rounded-lg bg-orange-600/30 border border-orange-500/40 text-orange-300 flex items-center justify-center font-bold text-xs" }, adminProfile?.name?.split(" ").map((n) => n[0]).join("").slice(0, 2) || "PO"), /* @__PURE__ */ import_react4.default.createElement("div", { className: "flex-1 min-w-0" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "text-xs font-bold text-white truncate" }, adminProfile?.name || "Praveen Ojha"), /* @__PURE__ */ import_react4.default.createElement("div", { className: "text-[10.5px] text-slate-400 truncate" }, adminProfile?.email || "praveen.ojha@rupeek.com"))), /* @__PURE__ */ import_react4.default.createElement("div", { className: "flex items-center justify-between px-1" }, /* @__PURE__ */ import_react4.default.createElement(Badge, { variant: "warning", size: "sm" }, adminProfile?.role || "SUPER_ADMIN"), /* @__PURE__ */ import_react4.default.createElement(
+      /* @__PURE__ */ import_react4.default.createElement("div", { className: "p-3.5 border-t border-slate-800/80 bg-[#071322] shrink-0" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "flex items-center gap-3 p-2 rounded-xl bg-slate-900/60 border border-slate-800 mb-3" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "w-8 h-8 rounded-lg bg-orange-600/30 border border-orange-500/40 text-orange-300 flex items-center justify-center font-bold text-xs" }, adminProfile?.name?.split(" ").map((n) => n[0]).join("").slice(0, 2) || "AD"), /* @__PURE__ */ import_react4.default.createElement("div", { className: "flex-1 min-w-0" }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "text-xs font-bold text-white truncate" }, adminProfile?.name || "Administrator"), /* @__PURE__ */ import_react4.default.createElement("div", { className: "text-[10.5px] text-slate-400 truncate" }, adminProfile?.email || "admin@rupeek.com"))), /* @__PURE__ */ import_react4.default.createElement("div", { className: "flex items-center justify-between px-1" }, /* @__PURE__ */ import_react4.default.createElement(Badge, { variant: "warning", size: "sm" }, adminProfile?.role || "LND_ADMIN"), /* @__PURE__ */ import_react4.default.createElement(
         "button",
         {
           onClick: logout,
@@ -33666,7 +34724,7 @@ ${suffix}`;
       /* @__PURE__ */ import_react5.default.createElement("span", { className: "w-2 h-2 rounded-full bg-emerald-500 animate-pulse" }),
       /* @__PURE__ */ import_react5.default.createElement("span", { className: "hidden sm:inline font-semibold" }, "Supabase DB"),
       /* @__PURE__ */ import_react5.default.createElement("span", { className: "text-[10px] text-slate-400 font-mono" }, "RLS Active")
-    ), /* @__PURE__ */ import_react5.default.createElement("div", { className: "flex items-center gap-2.5 pl-2 border-l border-slate-200" }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-bold text-xs shadow-sm" }, adminProfile?.name?.charAt(0) || "P"), /* @__PURE__ */ import_react5.default.createElement("div", { className: "hidden xl:block text-left" }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "text-xs font-bold text-slate-900 leading-none" }, adminProfile?.name || "Praveen Ojha"), /* @__PURE__ */ import_react5.default.createElement("div", { className: "text-[10px] text-slate-500 font-medium mt-0.5" }, adminProfile?.role || "SUPER_ADMIN")))));
+    ), /* @__PURE__ */ import_react5.default.createElement("div", { className: "flex items-center gap-2.5 pl-2 border-l border-slate-200" }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 text-white flex items-center justify-center font-bold text-xs shadow-sm" }, adminProfile?.name?.charAt(0) || "A"), /* @__PURE__ */ import_react5.default.createElement("div", { className: "hidden xl:block text-left" }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "text-xs font-bold text-slate-900 leading-none" }, adminProfile?.name || "Administrator"), /* @__PURE__ */ import_react5.default.createElement("div", { className: "text-[10px] text-slate-500 font-medium mt-0.5" }, adminProfile?.role || "LND_ADMIN")))));
   };
 
   // src/components/settings/SupabaseConfigModal.tsx
@@ -33865,16 +34923,20 @@ ${suffix}`;
   // src/pages/LoginPage.tsx
   var import_react9 = __toESM(require_react());
   var LoginPage = ({ onLoginSuccess }) => {
-    const [email, setEmail] = (0, import_react9.useState)("praveen.ojha@rupeek.com");
-    const [password, setPassword] = (0, import_react9.useState)("admin1234");
+    const [email, setEmail] = (0, import_react9.useState)("");
+    const [password, setPassword] = (0, import_react9.useState)("");
     const [showPassword, setShowPassword] = (0, import_react9.useState)(false);
     const [isConfigOpen, setIsConfigOpen] = (0, import_react9.useState)(false);
     const { login, isLoading, error } = useAuth();
     const { showSuccess, showError } = useToast();
     const handleSubmit = async (e) => {
       e.preventDefault();
-      if (!email) {
+      if (!email.trim()) {
         showError("Please enter your official administrator email.");
+        return;
+      }
+      if (!password) {
+        showError("Please enter your administrator password.");
         return;
       }
       const res = await login(email, password);
@@ -33885,10 +34947,6 @@ ${suffix}`;
         showError(res.error || "Authentication failed. Please verify credentials.", "Access Denied");
       }
     };
-    const handleQuickFill = (adminEmail) => {
-      setEmail(adminEmail);
-      setPassword("admin1234");
-    };
     return /* @__PURE__ */ import_react9.default.createElement("div", { className: "min-h-screen bg-[#071322] flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden font-sans selection:bg-orange-500 selection:text-white" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "absolute top-0 left-1/4 w-96 h-96 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" }), /* @__PURE__ */ import_react9.default.createElement("div", { className: "absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" }), /* @__PURE__ */ import_react9.default.createElement("div", { className: "absolute top-4 right-4 z-10" }, /* @__PURE__ */ import_react9.default.createElement(
       "button",
       {
@@ -33898,7 +34956,7 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-3.5 h-3.5 text-orange-400", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" }), /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z" })),
       /* @__PURE__ */ import_react9.default.createElement("span", null, "Supabase Config")
-    )), /* @__PURE__ */ import_react9.default.createElement("div", { className: "sm:mx-auto sm:w-full sm:max-w-md text-center" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white font-black text-2xl shadow-xl shadow-orange-950/60 mb-4 border border-orange-400/30" }, "SK"), /* @__PURE__ */ import_react9.default.createElement("h2", { className: "text-2xl font-black text-white tracking-tight sm:text-3xl" }, "SkillUp LMS"), /* @__PURE__ */ import_react9.default.createElement("div", { className: "flex items-center justify-center gap-2 mt-1" }, /* @__PURE__ */ import_react9.default.createElement("span", { className: "text-xs font-bold text-orange-400 uppercase tracking-widest bg-orange-950/50 px-2 py-0.5 rounded border border-orange-800/60" }, "RUPEEK INTERNAL PLATFORM"), /* @__PURE__ */ import_react9.default.createElement("span", { className: "text-xs text-slate-400" }, "\u2022 Admin Portal")), /* @__PURE__ */ import_react9.default.createElement("p", { className: "mt-2 text-xs text-slate-400 max-w-sm mx-auto" }, "Authorized access only. All sessions and actions are cryptographically verified and recorded in the audit log.")), /* @__PURE__ */ import_react9.default.createElement("div", { className: "mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "bg-[#0B192C] py-8 px-6 sm:px-8 shadow-2xl rounded-3xl border border-slate-800/90 backdrop-blur-xl relative" }, error && /* @__PURE__ */ import_react9.default.createElement("div", { className: "mb-5 p-3.5 rounded-xl bg-rose-950/80 border border-rose-700/50 text-rose-200 text-xs flex items-start gap-2.5" }, /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-4 h-4 text-rose-400 shrink-0 mt-0.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react9.default.createElement("div", { className: "font-medium" }, error)), /* @__PURE__ */ import_react9.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, /* @__PURE__ */ import_react9.default.createElement("div", null, /* @__PURE__ */ import_react9.default.createElement("label", { className: "block font-bold text-slate-200 uppercase tracking-wider text-[11px] mb-1.5" }, "Official Email Address"), /* @__PURE__ */ import_react9.default.createElement("div", { className: "relative" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400" }, /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" }))), /* @__PURE__ */ import_react9.default.createElement(
+    )), /* @__PURE__ */ import_react9.default.createElement("div", { className: "sm:mx-auto sm:w-full sm:max-w-md text-center" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white font-black text-2xl shadow-xl shadow-orange-950/60 mb-4 border border-orange-400/30" }, "SK"), /* @__PURE__ */ import_react9.default.createElement("h2", { className: "text-2xl font-black text-white tracking-tight sm:text-3xl" }, "SkillUp LMS"), /* @__PURE__ */ import_react9.default.createElement("div", { className: "flex items-center justify-center gap-2 mt-1" }, /* @__PURE__ */ import_react9.default.createElement("span", { className: "text-xs font-bold text-orange-400 uppercase tracking-widest bg-orange-950/50 px-2 py-0.5 rounded border border-orange-800/60" }, "RUPEEK INTERNAL PLATFORM"), /* @__PURE__ */ import_react9.default.createElement("span", { className: "text-xs text-slate-400" }, "\u2022 Admin Portal")), /* @__PURE__ */ import_react9.default.createElement("p", { className: "mt-2 text-xs text-slate-400 max-w-sm mx-auto" }, "Authorized access only. All administrative sessions are cryptographically verified against PostgreSQL security boundaries.")), /* @__PURE__ */ import_react9.default.createElement("div", { className: "mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "bg-[#0B192C] py-8 px-6 sm:px-8 shadow-2xl rounded-3xl border border-slate-800/90 backdrop-blur-xl relative" }, error && /* @__PURE__ */ import_react9.default.createElement("div", { className: "mb-5 p-3.5 rounded-xl bg-rose-950/80 border border-rose-700/50 text-rose-200 text-xs flex items-start gap-2.5" }, /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-4 h-4 text-rose-400 shrink-0 mt-0.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react9.default.createElement("div", { className: "font-medium" }, error)), /* @__PURE__ */ import_react9.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, /* @__PURE__ */ import_react9.default.createElement("div", null, /* @__PURE__ */ import_react9.default.createElement("label", { className: "block font-bold text-slate-200 uppercase tracking-wider text-[11px] mb-1.5" }, "Official Email Address"), /* @__PURE__ */ import_react9.default.createElement("div", { className: "relative" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400" }, /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" }))), /* @__PURE__ */ import_react9.default.createElement(
       "input",
       {
         type: "email",
@@ -33923,7 +34981,7 @@ ${suffix}`;
         required: true,
         value: password,
         onChange: (e) => setPassword(e.target.value),
-        placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+        placeholder: "Enter administrator password",
         className: "w-full pl-10 pr-3.5 py-2.5 bg-slate-900/80 border border-slate-700/80 rounded-xl text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition text-xs"
       }
     ))), /* @__PURE__ */ import_react9.default.createElement("div", { className: "pt-2" }, /* @__PURE__ */ import_react9.default.createElement(
@@ -33934,16 +34992,7 @@ ${suffix}`;
         className: "w-full py-3 px-4 rounded-xl text-white font-bold bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition shadow-lg shadow-orange-950/50 flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
       },
       isLoading ? /* @__PURE__ */ import_react9.default.createElement(import_react9.default.Fragment, null, /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-4 h-4 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react9.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react9.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react9.default.createElement("span", null, "Verifying Authorization...")) : /* @__PURE__ */ import_react9.default.createElement(import_react9.default.Fragment, null, /* @__PURE__ */ import_react9.default.createElement("span", null, "Sign In to LMS Admin"), /* @__PURE__ */ import_react9.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react9.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M14 5l7 7m0 0l-7 7m7-7H3" })))
-    ))), /* @__PURE__ */ import_react9.default.createElement("div", { className: "mt-6 pt-5 border-t border-slate-800/80" }, /* @__PURE__ */ import_react9.default.createElement("div", { className: "text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 text-center" }, "Existing Super Admin"), /* @__PURE__ */ import_react9.default.createElement(
-      "button",
-      {
-        type: "button",
-        onClick: () => handleQuickFill("praveen.ojha@rupeek.com"),
-        className: "w-full p-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-left transition flex items-center justify-between"
-      },
-      /* @__PURE__ */ import_react9.default.createElement("div", null, /* @__PURE__ */ import_react9.default.createElement("div", { className: "text-xs font-bold text-white" }, "Praveen Ojha"), /* @__PURE__ */ import_react9.default.createElement("div", { className: "text-[11px] text-slate-400 font-mono" }, "praveen.ojha@rupeek.com")),
-      /* @__PURE__ */ import_react9.default.createElement("span", { className: "text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-orange-950/80 text-orange-400 border border-orange-800/50" }, "SUPER_ADMIN")
-    )))), /* @__PURE__ */ import_react9.default.createElement(
+    ))))), /* @__PURE__ */ import_react9.default.createElement(
       SupabaseConfigModal,
       {
         isOpen: isConfigOpen,
@@ -33986,24 +35035,35 @@ ${suffix}`;
     const [stats, setStats] = (0, import_react11.useState)(null);
     const [locations, setLocations] = (0, import_react11.useState)([]);
     const [roles, setRoles] = (0, import_react11.useState)([]);
+    const [cityDist, setCityDist] = (0, import_react11.useState)([]);
+    const [roleDist, setRoleDist] = (0, import_react11.useState)([]);
     const [isLoading, setIsLoading] = (0, import_react11.useState)(true);
+    const [error, setError] = (0, import_react11.useState)(null);
     (0, import_react11.useEffect)(() => {
       let isMounted = true;
       async function loadData() {
         setIsLoading(true);
+        setError(null);
         try {
-          const [statsData, locData, rolesData] = await Promise.all([
+          const [statsData, locData, rolesData, cityData, roleData] = await Promise.all([
             fetchDashboardStats(),
             fetchLocations(),
-            fetchRoles()
+            fetchRoles(),
+            fetchLiveCityDistribution(),
+            fetchLiveDesignationDistribution()
           ]);
           if (isMounted) {
             setStats(statsData);
             setLocations(locData);
             setRoles(rolesData);
+            setCityDist(cityData);
+            setRoleDist(roleData);
           }
         } catch (err) {
-          console.error("Error loading dashboard stats:", err);
+          console.error("Error loading live dashboard metrics from Supabase:", err);
+          if (isMounted) {
+            setError(err?.message || "Failed to load real-time metrics from Supabase.");
+          }
         } finally {
           if (isMounted) setIsLoading(false);
         }
@@ -34013,7 +35073,16 @@ ${suffix}`;
         isMounted = false;
       };
     }, []);
-    return /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-6 animate-fade-in font-sans" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "bg-gradient-to-r from-[#0B192C] via-[#0F2848] to-[#1E3A5F] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-slate-800" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "absolute right-0 top-0 w-96 h-full bg-gradient-to-l from-orange-600/15 to-transparent pointer-events-none" }), /* @__PURE__ */ import_react11.default.createElement("div", { className: "relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "max-w-xl" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-400/30 text-orange-300 text-xs font-bold uppercase tracking-wider mb-3" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "w-2 h-2 rounded-full bg-orange-400 animate-pulse" }), "Rupeek Learning & Development"), /* @__PURE__ */ import_react11.default.createElement("h2", { className: "text-2xl sm:text-3xl font-black tracking-tight text-white" }, "SkillUp LMS Executive Dashboard"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "text-slate-300 text-xs sm:text-sm mt-1.5 leading-relaxed" }, "Real-time synchronization with Supabase PostgreSQL database. Monitoring 813 business employees across 26 operating locations.")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex flex-wrap items-center gap-3" }, /* @__PURE__ */ import_react11.default.createElement(
+    const totalEmployeesCount = stats ? stats.totalEmployees : 0;
+    const activeEmployeesCount = stats ? stats.activeEmployees : 0;
+    const skillUpEnabledCount = stats ? stats.skillUpEnabled : 0;
+    const skillUpDisabledCount = stats ? stats.skillUpDisabled : 0;
+    const totalCoursesCount = stats ? stats.totalCourses : 0;
+    const assignedCoursesCount = stats ? stats.assignedCourses : 0;
+    const completionRateVal = stats ? stats.completionRate : 0;
+    const activePct = totalEmployeesCount > 0 ? `${Math.round(activeEmployeesCount / totalEmployeesCount * 100)}%` : "0%";
+    const colorPalette = ["bg-orange-500", "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-amber-500", "bg-rose-500"];
+    return /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-6 animate-fade-in font-sans" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "bg-gradient-to-r from-[#0B192C] via-[#0F2848] to-[#1E3A5F] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden border border-slate-800" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "absolute right-0 top-0 w-96 h-full bg-gradient-to-l from-orange-600/15 to-transparent pointer-events-none" }), /* @__PURE__ */ import_react11.default.createElement("div", { className: "relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "max-w-xl" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-400/30 text-orange-300 text-xs font-bold uppercase tracking-wider mb-3" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "w-2 h-2 rounded-full bg-orange-400 animate-pulse" }), "Rupeek Learning & Development"), /* @__PURE__ */ import_react11.default.createElement("h2", { className: "text-2xl sm:text-3xl font-black tracking-tight text-white" }, "SkillUp LMS Executive Dashboard"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "text-slate-300 text-xs sm:text-sm mt-1.5 leading-relaxed" }, "Real-time synchronization with Supabase PostgreSQL database. Monitoring ", totalEmployeesCount > 0 ? `${totalEmployeesCount} business employees` : "employees", " across ", locations.length > 0 ? `${locations.length} operating locations` : "operating locations", ".")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex flex-wrap items-center gap-3" }, /* @__PURE__ */ import_react11.default.createElement(
       "button",
       {
         onClick: () => onNavigate("/admin/employees"),
@@ -34021,12 +35090,19 @@ ${suffix}`;
       },
       /* @__PURE__ */ import_react11.default.createElement("span", null, "Manage Employees"),
       /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M17 8l4 4m0 0l-4 4m4-4H3" }))
-    )))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" }, /* @__PURE__ */ import_react11.default.createElement(
+    )))), error && /* @__PURE__ */ import_react11.default.createElement("div", { className: "p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-4 h-4 text-rose-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react11.default.createElement("span", null, error)), /* @__PURE__ */ import_react11.default.createElement(
+      "button",
+      {
+        onClick: () => window.location.reload(),
+        className: "px-3 py-1 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 transition"
+      },
+      "Retry"
+    )), /* @__PURE__ */ import_react11.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" }, /* @__PURE__ */ import_react11.default.createElement(
       StatCard,
       {
         title: "Total Employees",
-        value: stats?.totalEmployees || 813,
-        subtitle: "Registered in employee master",
+        value: totalEmployeesCount,
+        subtitle: "Registered in public.employees",
         accentColor: "navy",
         loading: isLoading,
         icon: /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" }))
@@ -34035,9 +35111,9 @@ ${suffix}`;
       StatCard,
       {
         title: "Active Employees",
-        value: stats?.activeEmployees || 785,
-        subtitle: "Currently active headcount",
-        change: stats ? `${Math.round(stats.activeEmployees / stats.totalEmployees * 100)}%` : "96.5%",
+        value: activeEmployeesCount,
+        subtitle: "employment_status = 'ACTIVE'",
+        change: activePct,
         isPositive: true,
         accentColor: "emerald",
         loading: isLoading,
@@ -34047,9 +35123,9 @@ ${suffix}`;
       StatCard,
       {
         title: "SkillUp Enabled",
-        value: stats?.skillUpEnabled || 792,
-        subtitle: "Active learning platform access",
-        change: "Enabled",
+        value: skillUpEnabledCount,
+        subtitle: "skillup_access = 'ENABLED'",
+        change: "Access Active",
         isPositive: true,
         accentColor: "blue",
         loading: isLoading,
@@ -34059,8 +35135,8 @@ ${suffix}`;
       StatCard,
       {
         title: "SkillUp Disabled",
-        value: stats?.skillUpDisabled || 21,
-        subtitle: "Access restricted / on-hold",
+        value: skillUpDisabledCount,
+        subtitle: "skillup_access = 'DISABLED'",
         accentColor: "rose",
         loading: isLoading,
         icon: /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" }))
@@ -34069,8 +35145,8 @@ ${suffix}`;
       StatCard,
       {
         title: "Total Courses",
-        value: stats?.totalCourses || 12,
-        subtitle: "Gold Loan, Sales & Compliance",
+        value: totalCoursesCount,
+        subtitle: totalCoursesCount > 0 ? "Published curricula" : "No courses published in database yet",
         accentColor: "orange",
         loading: isLoading,
         icon: /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" }))
@@ -34079,8 +35155,8 @@ ${suffix}`;
       StatCard,
       {
         title: "Assigned Enrollments",
-        value: stats?.assignedCourses || 1420,
-        subtitle: "Active curriculum tracks",
+        value: assignedCoursesCount,
+        subtitle: assignedCoursesCount > 0 ? "Active employee assignments" : "No assignments created yet",
         accentColor: "blue",
         loading: isLoading,
         icon: /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" }))
@@ -34089,57 +35165,43 @@ ${suffix}`;
       StatCard,
       {
         title: "Completion Rate",
-        value: `${stats?.completionRate || 78}%`,
-        subtitle: "Organization completion ratio",
-        change: "+4.2%",
-        isPositive: true,
+        value: assignedCoursesCount > 0 ? `${completionRateVal}%` : "0%",
+        subtitle: assignedCoursesCount > 0 ? "Organization completion ratio" : "No assignments to complete yet",
         accentColor: "emerald",
         loading: isLoading,
         icon: /* @__PURE__ */ import_react11.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react11.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" }))
       }
-    )), /* @__PURE__ */ import_react11.default.createElement("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-6" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between mb-4" }, /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("h3", { className: "text-sm font-bold text-slate-900 uppercase tracking-wider" }, "Operating Locations (26 Cities)"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Top employee distribution across business regions")), /* @__PURE__ */ import_react11.default.createElement(
+    )), /* @__PURE__ */ import_react11.default.createElement("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-6" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between mb-4" }, /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("h3", { className: "text-sm font-bold text-slate-900 uppercase tracking-wider" }, "Operating Locations ", locations.length > 0 ? `(${locations.length} Locations)` : ""), /* @__PURE__ */ import_react11.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Live headcount distribution from Supabase")), /* @__PURE__ */ import_react11.default.createElement(
       "button",
       {
         onClick: () => onNavigate("/admin/employees"),
         className: "text-xs font-bold text-orange-600 hover:text-orange-700 transition"
       },
-      "View Filtered \u2192"
-    )), /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-3" }, [
-      { name: "Bangalore (HQ & South Hub)", count: 245, pct: 30, color: "bg-orange-500" },
-      { name: "Mumbai (West Hub)", count: 180, pct: 22, color: "bg-blue-500" },
-      { name: "Delhi NCR (North Hub)", count: 154, pct: 19, color: "bg-emerald-500" },
-      { name: "Hyderabad (Deccan Region)", count: 112, pct: 14, color: "bg-purple-500" },
-      { name: "Chennai & Other Tier-2 Cities (22 locations)", count: 122, pct: 15, color: "bg-slate-400" }
-    ].map((item, idx) => /* @__PURE__ */ import_react11.default.createElement("div", { key: idx, className: "space-y-1" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between text-xs" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-semibold text-slate-700" }, item.name), /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-bold text-slate-900" }, item.count, " employees (", item.pct, "%)")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "w-full h-2 bg-slate-100 rounded-full overflow-hidden" }, /* @__PURE__ */ import_react11.default.createElement(
+      "View Directory \u2192"
+    )), isLoading ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-3 animate-pulse" }, [1, 2, 3, 4, 5].map((n) => /* @__PURE__ */ import_react11.default.createElement("div", { key: n, className: "space-y-1" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "h-3 bg-slate-100 rounded w-1/3" }), /* @__PURE__ */ import_react11.default.createElement("div", { className: "h-2 bg-slate-100 rounded-full w-full" })))) : cityDist.length > 0 ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-3" }, cityDist.slice(0, 6).map((item, idx) => /* @__PURE__ */ import_react11.default.createElement("div", { key: idx, className: "space-y-1" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between text-xs" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-semibold text-slate-700" }, item.location_name), /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-bold text-slate-900" }, item.count, " employees (", item.percentage, "%)")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "w-full h-2 bg-slate-100 rounded-full overflow-hidden" }, /* @__PURE__ */ import_react11.default.createElement(
       "div",
       {
-        className: `h-full ${item.color} rounded-full transition-all duration-500`,
-        style: { width: `${item.pct}%` }
+        className: `h-full ${colorPalette[idx % colorPalette.length]} rounded-full transition-all duration-500`,
+        style: { width: `${Math.min(100, Math.max(2, item.percentage))}%` }
       }
-    )))))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between mb-4" }, /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("h3", { className: "text-sm font-bold text-slate-900 uppercase tracking-wider" }, "Business Designations (15 Roles)"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Learning curriculum target roles and headcount")), /* @__PURE__ */ import_react11.default.createElement(
+    ))))) : /* @__PURE__ */ import_react11.default.createElement("div", { className: "py-8 text-center text-xs text-slate-400" }, "No location data found in Supabase.")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between mb-4" }, /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("h3", { className: "text-sm font-bold text-slate-900 uppercase tracking-wider" }, "Business Roles ", roles.length > 0 ? `(${roles.length} Roles)` : ""), /* @__PURE__ */ import_react11.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Live role headcount distribution from Supabase")), /* @__PURE__ */ import_react11.default.createElement(
       "button",
       {
         onClick: () => onNavigate("/admin/employees"),
         className: "text-xs font-bold text-orange-600 hover:text-orange-700 transition"
       },
       "Explore Roles \u2192"
-    )), /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-3" }, [
-      { name: "Relationship Manager (RM)", count: 420, pct: 52, color: "bg-orange-500" },
-      { name: "Territory Branch Manager (TBM)", count: 195, pct: 24, color: "bg-blue-500" },
-      { name: "Area Branch Manager (ABM)", count: 110, pct: 13, color: "bg-emerald-500" },
-      { name: "Regional Business Head (RBH)", count: 48, pct: 6, color: "bg-amber-500" },
-      { name: "Quality & Field Appraisers", count: 40, pct: 5, color: "bg-purple-500" }
-    ].map((item, idx) => /* @__PURE__ */ import_react11.default.createElement("div", { key: idx, className: "space-y-1" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between text-xs" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-semibold text-slate-700" }, item.name), /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-bold text-slate-900" }, item.count, " employees (", item.pct, "%)")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "w-full h-2 bg-slate-100 rounded-full overflow-hidden" }, /* @__PURE__ */ import_react11.default.createElement(
+    )), isLoading ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-3 animate-pulse" }, [1, 2, 3, 4, 5].map((n) => /* @__PURE__ */ import_react11.default.createElement("div", { key: n, className: "space-y-1" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "h-3 bg-slate-100 rounded w-1/3" }), /* @__PURE__ */ import_react11.default.createElement("div", { className: "h-2 bg-slate-100 rounded-full w-full" })))) : roleDist.length > 0 ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "space-y-3" }, roleDist.slice(0, 6).map((item, idx) => /* @__PURE__ */ import_react11.default.createElement("div", { key: idx, className: "space-y-1" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "flex items-center justify-between text-xs" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-semibold text-slate-700" }, item.role_name), /* @__PURE__ */ import_react11.default.createElement("span", { className: "font-bold text-slate-900" }, item.count, " employees (", item.percentage, "%)")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "w-full h-2 bg-slate-100 rounded-full overflow-hidden" }, /* @__PURE__ */ import_react11.default.createElement(
       "div",
       {
-        className: `h-full ${item.color} rounded-full transition-all duration-500`,
-        style: { width: `${item.pct}%` }
+        className: `h-full ${colorPalette[idx % colorPalette.length]} rounded-full transition-all duration-500`,
+        style: { width: `${Math.min(100, Math.max(2, item.percentage))}%` }
       }
-    ))))))));
+    ))))) : /* @__PURE__ */ import_react11.default.createElement("div", { className: "py-8 text-center text-xs text-slate-400" }, "No role data found in Supabase."))));
   };
 
   // src/pages/EmployeesPage.tsx
-  var import_react13 = __toESM(require_react());
+  var import_react17 = __toESM(require_react());
 
   // src/components/common/Pagination.tsx
   var import_react12 = __toESM(require_react());
@@ -34201,14 +35263,820 @@ ${suffix}`;
     )));
   };
 
+  // src/components/employee/AddEmployeeModal.tsx
+  var import_react13 = __toESM(require_react());
+  var AddEmployeeModal = ({
+    isOpen,
+    onClose,
+    onSuccess,
+    roles,
+    locations
+  }) => {
+    const { showSuccess, showError } = useToast();
+    const [formData, setFormData] = (0, import_react13.useState)({
+      employee_id: "",
+      full_name: "",
+      email: "",
+      mobile_number: "",
+      role_id: roles.length > 0 ? Number(roles[0].id) : 0,
+      location_id: locations.length > 0 ? Number(locations[0].id) : 0,
+      reporting_manager_employee_id: "",
+      reporting_manager_name: "",
+      employment_status: "ACTIVE",
+      skillup_access: "ENABLED"
+    });
+    const [isSubmitting, setIsSubmitting] = (0, import_react13.useState)(false);
+    const [formErrors, setFormErrors] = (0, import_react13.useState)({});
+    import_react13.default.useEffect(() => {
+      if (isOpen) {
+        setFormData({
+          employee_id: "",
+          full_name: "",
+          email: "",
+          mobile_number: "",
+          role_id: roles.length > 0 ? Number(roles[0].id) : 0,
+          location_id: locations.length > 0 ? Number(locations[0].id) : 0,
+          reporting_manager_employee_id: "",
+          reporting_manager_name: "",
+          employment_status: "ACTIVE",
+          skillup_access: "ENABLED"
+        });
+        setFormErrors({});
+        setIsSubmitting(false);
+      }
+    }, [isOpen, roles, locations]);
+    const validate = () => {
+      const errors = {};
+      const cleanId = formData.employee_id.trim();
+      if (!cleanId) {
+        errors.employee_id = "Employee ID is required (e.g. EMP814).";
+      }
+      const cleanName = formData.full_name.trim();
+      if (!cleanName) {
+        errors.full_name = "Full Name is required.";
+      }
+      const cleanEmail = formData.email.trim();
+      if (!cleanEmail) {
+        errors.email = "Official Email is required.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        errors.email = "Please enter a valid email address format.";
+      }
+      if (!formData.role_id || formData.role_id === 0) {
+        errors.role_id = "Please select a valid Designation.";
+      }
+      if (!formData.location_id || formData.location_id === 0) {
+        errors.location_id = "Please select a valid Operating Location.";
+      }
+      setFormErrors(errors);
+      return Object.keys(errors).length === 0;
+    };
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!validate()) return;
+      setIsSubmitting(true);
+      try {
+        await createEmployee(formData);
+        showSuccess(`Employee ${formData.full_name} (${formData.employee_id.toUpperCase()}) added successfully.`, "Employee Created");
+        onSuccess();
+        onClose();
+      } catch (err) {
+        console.error("Error adding employee:", err);
+        const errMsg = err?.message || "Unable to save employee. Please try again.";
+        showError(errMsg, "Failed to Add Employee");
+        setFormErrors((prev) => ({ ...prev, general: errMsg }));
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react13.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: "Add New Employee",
+        subtitle: "Register an employee master record into public.employees",
+        maxWidth: "xl"
+      },
+      /* @__PURE__ */ import_react13.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, formErrors.general && /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-center gap-2" }, /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-4 h-4 text-rose-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react13.default.createElement("span", null, formErrors.general)), /* @__PURE__ */ import_react13.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" }, /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Employee ID ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: formData.employee_id,
+          onChange: (e) => {
+            setFormData({ ...formData, employee_id: e.target.value.toUpperCase() });
+            if (formErrors.employee_id) setFormErrors({ ...formErrors, employee_id: "" });
+          },
+          placeholder: "e.g. EMP814",
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl font-mono text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.employee_id ? "border-rose-400 bg-rose-50/30" : "border-slate-200"}`
+        }
+      ), formErrors.employee_id && /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.employee_id)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Full Name ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: formData.full_name,
+          onChange: (e) => {
+            setFormData({ ...formData, full_name: e.target.value });
+            if (formErrors.full_name) setFormErrors({ ...formErrors, full_name: "" });
+          },
+          placeholder: "e.g. Anand Mahindra",
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.full_name ? "border-rose-400 bg-rose-50/30" : "border-slate-200"}`
+        }
+      ), formErrors.full_name && /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.full_name)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Official Email ID ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "input",
+        {
+          type: "email",
+          required: true,
+          value: formData.email,
+          onChange: (e) => {
+            setFormData({ ...formData, email: e.target.value.toLowerCase() });
+            if (formErrors.email) setFormErrors({ ...formErrors, email: "" });
+          },
+          placeholder: "e.g. anand.m@rupeek.com",
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.email ? "border-rose-400 bg-rose-50/30" : "border-slate-200"}`
+        }
+      ), formErrors.email && /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.email)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Mobile Number"), /* @__PURE__ */ import_react13.default.createElement(
+        "input",
+        {
+          type: "tel",
+          value: formData.mobile_number || "",
+          onChange: (e) => setFormData({ ...formData, mobile_number: e.target.value }),
+          placeholder: "e.g. +91 98765 43210",
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        }
+      )), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Designation / Role ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "select",
+        {
+          value: formData.role_id,
+          onChange: (e) => {
+            setFormData({ ...formData, role_id: Number(e.target.value) });
+            if (formErrors.role_id) setFormErrors({ ...formErrors, role_id: "" });
+          },
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.role_id ? "border-rose-400" : "border-slate-200"}`
+        },
+        /* @__PURE__ */ import_react13.default.createElement("option", { value: 0 }, "Select Designation..."),
+        roles.map((r) => /* @__PURE__ */ import_react13.default.createElement("option", { key: r.id, value: Number(r.id) }, r.name, " ", r.department ? `(${r.department})` : ""))
+      ), formErrors.role_id && /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.role_id)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Operating Location ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "select",
+        {
+          value: formData.location_id,
+          onChange: (e) => {
+            setFormData({ ...formData, location_id: Number(e.target.value) });
+            if (formErrors.location_id) setFormErrors({ ...formErrors, location_id: "" });
+          },
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.location_id ? "border-rose-400" : "border-slate-200"}`
+        },
+        /* @__PURE__ */ import_react13.default.createElement("option", { value: 0 }, "Select Operating Location..."),
+        locations.map((loc) => /* @__PURE__ */ import_react13.default.createElement("option", { key: loc.id, value: Number(loc.id) }, loc.city || loc.name, " ", loc.state ? `\u2014 ${loc.state}` : ""))
+      ), formErrors.location_id && /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.location_id)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Reporting Manager Name"), /* @__PURE__ */ import_react13.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: formData.reporting_manager_name || "",
+          onChange: (e) => setFormData({ ...formData, reporting_manager_name: e.target.value }),
+          placeholder: "e.g. Priya Sharma",
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        }
+      )), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Reporting Manager Employee ID"), /* @__PURE__ */ import_react13.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: formData.reporting_manager_employee_id || "",
+          onChange: (e) => setFormData({ ...formData, reporting_manager_employee_id: e.target.value.toUpperCase() }),
+          placeholder: "e.g. EMP004",
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        }
+      )), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Employment Status ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "select",
+        {
+          value: formData.employment_status,
+          onChange: (e) => setFormData({ ...formData, employment_status: e.target.value }),
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        },
+        /* @__PURE__ */ import_react13.default.createElement("option", { value: "ACTIVE" }, "ACTIVE"),
+        /* @__PURE__ */ import_react13.default.createElement("option", { value: "INACTIVE" }, "INACTIVE")
+      )), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "SkillUp Access ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react13.default.createElement(
+        "select",
+        {
+          value: formData.skillup_access,
+          onChange: (e) => setFormData({ ...formData, skillup_access: e.target.value }),
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        },
+        /* @__PURE__ */ import_react13.default.createElement("option", { value: "ENABLED" }, "ENABLED"),
+        /* @__PURE__ */ import_react13.default.createElement("option", { value: "DISABLED" }, "DISABLED")
+      ))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-5" }, /* @__PURE__ */ import_react13.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition disabled:opacity-50"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react13.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react13.default.createElement(import_react13.default.Fragment, null, /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react13.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react13.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })), /* @__PURE__ */ import_react13.default.createElement("span", null, "Saving Employee...")) : /* @__PURE__ */ import_react13.default.createElement(import_react13.default.Fragment, null, /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6v6m0 0v6m0-6h6m-6 0H6" })), /* @__PURE__ */ import_react13.default.createElement("span", null, "Add Employee"))
+      )))
+    );
+  };
+
+  // src/components/employee/EditEmployeeModal.tsx
+  var import_react14 = __toESM(require_react());
+  var EditEmployeeModal = ({
+    isOpen,
+    onClose,
+    onSuccess,
+    employee,
+    roles,
+    locations
+  }) => {
+    const { showSuccess, showError } = useToast();
+    const [formData, setFormData] = (0, import_react14.useState)({
+      full_name: "",
+      mobile_number: "",
+      role_id: 0,
+      location_id: 0,
+      reporting_manager_employee_id: "",
+      reporting_manager_name: "",
+      employment_status: "ACTIVE",
+      skillup_access: "ENABLED"
+    });
+    const [isSubmitting, setIsSubmitting] = (0, import_react14.useState)(false);
+    const [formErrors, setFormErrors] = (0, import_react14.useState)({});
+    (0, import_react14.useEffect)(() => {
+      if (employee && isOpen) {
+        setFormData({
+          full_name: employee.full_name || "",
+          mobile_number: employee.mobile_number || "",
+          role_id: employee.role_id ? Number(employee.role_id) : roles.length > 0 ? Number(roles[0].id) : 0,
+          location_id: employee.location_id ? Number(employee.location_id) : locations.length > 0 ? Number(locations[0].id) : 0,
+          reporting_manager_employee_id: employee.reporting_manager_employee_id || "",
+          reporting_manager_name: employee.reporting_manager_name || "",
+          employment_status: employee.employment_status || "ACTIVE",
+          skillup_access: employee.skillup_access || "ENABLED"
+        });
+        setFormErrors({});
+        setIsSubmitting(false);
+      }
+    }, [employee, isOpen, roles, locations]);
+    if (!employee) return null;
+    const validate = () => {
+      const errors = {};
+      const cleanName = formData.full_name.trim();
+      if (!cleanName) {
+        errors.full_name = "Full Name is required.";
+      }
+      if (!formData.role_id || formData.role_id === 0) {
+        errors.role_id = "Please select a valid Designation.";
+      }
+      if (!formData.location_id || formData.location_id === 0) {
+        errors.location_id = "Please select a valid Operating Location.";
+      }
+      setFormErrors(errors);
+      return Object.keys(errors).length === 0;
+    };
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!validate()) return;
+      if (!employee.id) {
+        showError("Missing employee record ID identifier.", "Update Error");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await updateEmployee(employee.id, formData, employee);
+        showSuccess(`Employee details for ${formData.full_name} (${employee.employee_id}) updated successfully.`, "Employee Updated");
+        onSuccess();
+        onClose();
+      } catch (err) {
+        console.error("Error updating employee:", err);
+        const errMsg = err?.message || "Unable to update employee. Please try again.";
+        showError(errMsg, "Failed to Update Employee");
+        setFormErrors((prev) => ({ ...prev, general: errMsg }));
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react14.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: "Edit Employee Master Record",
+        subtitle: `Modifying profile for ${employee.full_name} (${employee.employee_id})`,
+        maxWidth: "xl"
+      },
+      /* @__PURE__ */ import_react14.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, formErrors.general && /* @__PURE__ */ import_react14.default.createElement("div", { className: "p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 flex items-center gap-2" }, /* @__PURE__ */ import_react14.default.createElement("svg", { className: "w-4 h-4 text-rose-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react14.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react14.default.createElement("span", null, formErrors.general)), /* @__PURE__ */ import_react14.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-2 gap-3" }, /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Employee ID (System Key)"), /* @__PURE__ */ import_react14.default.createElement("div", { className: "font-mono font-bold text-orange-600 text-xs mt-0.5" }, employee.employee_id)), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Official Email ID"), /* @__PURE__ */ import_react14.default.createElement("div", { className: "font-semibold text-slate-800 text-xs mt-0.5 truncate" }, employee.email))), /* @__PURE__ */ import_react14.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" }, /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Full Name ", /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react14.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: formData.full_name,
+          onChange: (e) => {
+            setFormData({ ...formData, full_name: e.target.value });
+            if (formErrors.full_name) setFormErrors({ ...formErrors, full_name: "" });
+          },
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.full_name ? "border-rose-400 bg-rose-50/30" : "border-slate-200"}`
+        }
+      ), formErrors.full_name && /* @__PURE__ */ import_react14.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.full_name)), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Mobile Number"), /* @__PURE__ */ import_react14.default.createElement(
+        "input",
+        {
+          type: "tel",
+          value: formData.mobile_number || "",
+          onChange: (e) => setFormData({ ...formData, mobile_number: e.target.value }),
+          placeholder: "e.g. +91 98765 43210",
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        }
+      )), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Designation / Role ", /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react14.default.createElement(
+        "select",
+        {
+          value: formData.role_id,
+          onChange: (e) => {
+            setFormData({ ...formData, role_id: Number(e.target.value) });
+            if (formErrors.role_id) setFormErrors({ ...formErrors, role_id: "" });
+          },
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.role_id ? "border-rose-400" : "border-slate-200"}`
+        },
+        /* @__PURE__ */ import_react14.default.createElement("option", { value: 0 }, "Select Designation..."),
+        roles.map((r) => /* @__PURE__ */ import_react14.default.createElement("option", { key: r.id, value: Number(r.id) }, r.name, " ", r.department ? `(${r.department})` : ""))
+      ), formErrors.role_id && /* @__PURE__ */ import_react14.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.role_id)), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Operating Location ", /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react14.default.createElement(
+        "select",
+        {
+          value: formData.location_id,
+          onChange: (e) => {
+            setFormData({ ...formData, location_id: Number(e.target.value) });
+            if (formErrors.location_id) setFormErrors({ ...formErrors, location_id: "" });
+          },
+          className: `w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${formErrors.location_id ? "border-rose-400" : "border-slate-200"}`
+        },
+        /* @__PURE__ */ import_react14.default.createElement("option", { value: 0 }, "Select Operating Location..."),
+        locations.map((loc) => /* @__PURE__ */ import_react14.default.createElement("option", { key: loc.id, value: Number(loc.id) }, loc.city || loc.name, " ", loc.state ? `\u2014 ${loc.state}` : ""))
+      ), formErrors.location_id && /* @__PURE__ */ import_react14.default.createElement("p", { className: "text-[10.5px] text-rose-600 mt-1" }, formErrors.location_id)), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Reporting Manager Name"), /* @__PURE__ */ import_react14.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: formData.reporting_manager_name || "",
+          onChange: (e) => setFormData({ ...formData, reporting_manager_name: e.target.value }),
+          placeholder: "e.g. Priya Sharma",
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        }
+      )), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Reporting Manager Employee ID"), /* @__PURE__ */ import_react14.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: formData.reporting_manager_employee_id || "",
+          onChange: (e) => setFormData({ ...formData, reporting_manager_employee_id: e.target.value.toUpperCase() }),
+          placeholder: "e.g. EMP004",
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        }
+      )), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "Employment Status ", /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react14.default.createElement(
+        "select",
+        {
+          value: formData.employment_status,
+          onChange: (e) => setFormData({ ...formData, employment_status: e.target.value }),
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        },
+        /* @__PURE__ */ import_react14.default.createElement("option", { value: "ACTIVE" }, "ACTIVE"),
+        /* @__PURE__ */ import_react14.default.createElement("option", { value: "INACTIVE" }, "INACTIVE")
+      )), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("label", { className: "block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1" }, "SkillUp Access ", /* @__PURE__ */ import_react14.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react14.default.createElement(
+        "select",
+        {
+          value: formData.skillup_access,
+          onChange: (e) => setFormData({ ...formData, skillup_access: e.target.value }),
+          className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition"
+        },
+        /* @__PURE__ */ import_react14.default.createElement("option", { value: "ENABLED" }, "ENABLED"),
+        /* @__PURE__ */ import_react14.default.createElement("option", { value: "DISABLED" }, "DISABLED")
+      ))), /* @__PURE__ */ import_react14.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-5" }, /* @__PURE__ */ import_react14.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition disabled:opacity-50"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react14.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react14.default.createElement(import_react14.default.Fragment, null, /* @__PURE__ */ import_react14.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react14.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react14.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })), /* @__PURE__ */ import_react14.default.createElement("span", null, "Saving Changes...")) : /* @__PURE__ */ import_react14.default.createElement("span", null, "Save Changes")
+      )))
+    );
+  };
+
+  // src/components/employee/AccessToggleModal.tsx
+  var import_react15 = __toESM(require_react());
+  var AccessToggleModal = ({
+    isOpen,
+    onClose,
+    onSuccess,
+    employee,
+    targetAccess
+  }) => {
+    const { showSuccess, showError } = useToast();
+    const [isSubmitting, setIsSubmitting] = (0, import_react15.useState)(false);
+    if (!employee) return null;
+    const isDisabling = targetAccess === "DISABLED";
+    const handleConfirm = async () => {
+      setIsSubmitting(true);
+      try {
+        await toggleSkillUpAccess(employee, targetAccess);
+        const actionText = isDisabling ? "disabled" : "enabled";
+        showSuccess(
+          `SkillUp learning access for ${employee.full_name} (${employee.employee_id}) has been ${actionText}.`,
+          isDisabling ? "Access Revoked" : "Access Restored"
+        );
+        onSuccess();
+        onClose();
+      } catch (err) {
+        console.error("Error toggling access:", err);
+        showError(err?.message || "Failed to update SkillUp access.", "Access Update Error");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react15.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: isDisabling ? "Disable SkillUp Access" : "Enable SkillUp Access",
+        subtitle: `Employee: ${employee.full_name} (${employee.employee_id})`,
+        maxWidth: "md"
+      },
+      /* @__PURE__ */ import_react15.default.createElement("div", { className: "space-y-4 text-xs" }, isDisabling ? /* @__PURE__ */ import_react15.default.createElement("div", { className: "p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-2" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-start gap-2.5" }, /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-5 h-5 text-amber-600 shrink-0 mt-0.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react15.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" })), /* @__PURE__ */ import_react15.default.createElement("div", { className: "space-y-1" }, /* @__PURE__ */ import_react15.default.createElement("p", { className: "font-bold text-amber-900 text-xs leading-relaxed" }, "Disable SkillUp learning access for this employee?"), /* @__PURE__ */ import_react15.default.createElement("p", { className: "text-amber-800 text-[11.5px] leading-relaxed" }, "The employee record and all learning history will be retained.")))) : /* @__PURE__ */ import_react15.default.createElement("div", { className: "p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-start gap-2.5" }, /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-5 h-5 text-emerald-600 shrink-0 mt-0.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react15.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react15.default.createElement("div", { className: "space-y-1" }, /* @__PURE__ */ import_react15.default.createElement("p", { className: "font-bold text-emerald-900 text-xs leading-relaxed" }, "Enable SkillUp learning access for this employee?"), /* @__PURE__ */ import_react15.default.createElement("p", { className: "text-emerald-800 text-[11.5px] leading-relaxed" }, "The employee will have access to SkillUp learning modules and assigned courses.")))), /* @__PURE__ */ import_react15.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "text-slate-500 font-medium" }, "Employee ID"), /* @__PURE__ */ import_react15.default.createElement("span", { className: "font-mono font-bold text-orange-600" }, employee.employee_id)), /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "text-slate-500 font-medium" }, "Full Name"), /* @__PURE__ */ import_react15.default.createElement("span", { className: "font-semibold text-slate-800" }, employee.full_name)), /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "text-slate-500 font-medium" }, "Designation"), /* @__PURE__ */ import_react15.default.createElement("span", { className: "text-slate-700" }, employee.role_name || (employee.role_id ? `Role #${employee.role_id}` : "Unassigned"))), /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ import_react15.default.createElement("span", { className: "text-slate-500 font-medium" }, "Employment Status"), /* @__PURE__ */ import_react15.default.createElement("span", { className: "font-bold text-slate-800" }, employee.employment_status, " (Preserved)"))), /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-3 border-t border-slate-100 mt-4" }, /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition disabled:opacity-50"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react15.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: handleConfirm,
+          disabled: isSubmitting,
+          className: `px-5 py-2 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-2 disabled:opacity-50 ${isDisabling ? "bg-rose-600 hover:bg-rose-700" : "bg-emerald-600 hover:bg-emerald-700"}`
+        },
+        isSubmitting ? /* @__PURE__ */ import_react15.default.createElement(import_react15.default.Fragment, null, /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react15.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react15.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })), /* @__PURE__ */ import_react15.default.createElement("span", null, "Updating Access...")) : isDisabling ? /* @__PURE__ */ import_react15.default.createElement("span", null, "Disable Access") : /* @__PURE__ */ import_react15.default.createElement("span", null, "Enable Access")
+      )))
+    );
+  };
+
+  // src/components/employee/BulkImportModal.tsx
+  var import_react16 = __toESM(require_react());
+  var BulkImportModal = ({
+    isOpen,
+    onClose,
+    onSuccess,
+    roles,
+    locations
+  }) => {
+    const { showSuccess, showError, showInfo } = useToast();
+    const fileInputRef = (0, import_react16.useRef)(null);
+    const [step, setStep] = (0, import_react16.useState)("upload");
+    const [selectedFile, setSelectedFile] = (0, import_react16.useState)(null);
+    const [isProcessing, setIsProcessing] = (0, import_react16.useState)(false);
+    const [validationResult, setValidationResult] = (0, import_react16.useState)(null);
+    const [importSummary, setImportSummary] = (0, import_react16.useState)(null);
+    const [activeTab, setActiveTab] = (0, import_react16.useState)("errors");
+    import_react16.default.useEffect(() => {
+      if (isOpen) {
+        setStep("upload");
+        setSelectedFile(null);
+        setIsProcessing(false);
+        setValidationResult(null);
+        setImportSummary(null);
+        setActiveTab("errors");
+      }
+    }, [isOpen]);
+    const handleDownloadTemplate = () => {
+      const headers = [
+        "Employee ID",
+        "Full Name",
+        "Official Email ID",
+        "Mobile Number",
+        "Designation",
+        "Operating Location",
+        "Reporting Manager Employee ID",
+        "Reporting Manager Name",
+        "Employment Status",
+        "SkillUp Access"
+      ].join(",");
+      const blob = new Blob([headers + "\n"], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "SkillUp_Employee_Bulk_Import_Template.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showInfo("Clean CSV template downloaded (headers only).", "Template Download");
+    };
+    const parseCsvLine = (text) => {
+      const result = [];
+      let cur = "";
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        if (char === '"' || char === "'") {
+          inQuotes = !inQuotes;
+        } else if (char === "," && !inQuotes) {
+          result.push(cur.trim().replace(/^["']|["']$/g, ""));
+          cur = "";
+        } else {
+          cur += char;
+        }
+      }
+      result.push(cur.trim().replace(/^["']|["']$/g, ""));
+      return result;
+    };
+    const handleFileChange = async (file) => {
+      if (!file) return;
+      setSelectedFile(file);
+      setIsProcessing(true);
+      try {
+        const text = await file.text();
+        const lines = text.split(/\r\n|\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+        if (lines.length <= 1) {
+          showError("The uploaded CSV file has no employee data rows.", "Empty File");
+          setIsProcessing(false);
+          return;
+        }
+        const { employeeIds: existingIds, emails: existingEmails } = await fetchAllExistingEmployeeIdentifiers();
+        const seenIdsInCsv = /* @__PURE__ */ new Set();
+        const seenEmailsInCsv = /* @__PURE__ */ new Set();
+        let duplicateRowsCount = 0;
+        const validRows = [];
+        const invalidRows = [];
+        const allErrors = [];
+        const roleMap = /* @__PURE__ */ new Map();
+        roles.forEach((r) => {
+          roleMap.set(r.name.toLowerCase().trim(), r);
+        });
+        const locationMap = /* @__PURE__ */ new Map();
+        locations.forEach((loc) => {
+          if (loc.name) locationMap.set(loc.name.toLowerCase().trim(), loc);
+          if (loc.city) locationMap.set(loc.city.toLowerCase().trim(), loc);
+        });
+        const dataRows = lines.slice(1);
+        dataRows.forEach((line, idx) => {
+          const rowNum = idx + 2;
+          const cols = parseCsvLine(line);
+          const empId = (cols[0] || "").trim().toUpperCase();
+          const fullName = (cols[1] || "").trim();
+          const email = (cols[2] || "").trim().toLowerCase();
+          const mobile = (cols[3] || "").trim();
+          const roleStr = (cols[4] || "").trim();
+          const locStr = (cols[5] || "").trim();
+          const mgrEmpId = (cols[6] || "").trim().toUpperCase();
+          const mgrName = (cols[7] || "").trim();
+          const rawStatus = (cols[8] || "ACTIVE").trim().toUpperCase();
+          const rawAccess = (cols[9] || "ENABLED").trim().toUpperCase();
+          const employment_status = rawStatus === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+          const skillup_access = rawAccess === "DISABLED" ? "DISABLED" : "ENABLED";
+          const rowErrors = [];
+          if (!empId) rowErrors.push("Missing Employee ID.");
+          if (!fullName) rowErrors.push("Missing Full Name.");
+          if (!email) rowErrors.push("Missing Official Email.");
+          else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            rowErrors.push(`Invalid email format: "${email}".`);
+          }
+          if (empId) {
+            if (seenIdsInCsv.has(empId)) {
+              rowErrors.push(`Duplicate Employee ID "${empId}" found within CSV.`);
+              duplicateRowsCount++;
+            } else {
+              seenIdsInCsv.add(empId);
+            }
+          }
+          if (email) {
+            if (seenEmailsInCsv.has(email)) {
+              rowErrors.push(`Duplicate Email "${email}" found within CSV.`);
+            } else {
+              seenEmailsInCsv.add(email);
+            }
+          }
+          if (empId && existingIds.has(empId)) {
+            rowErrors.push(`Employee ID "${empId}" already exists in public.employees (Protected).`);
+          }
+          if (email && existingEmails.has(email)) {
+            rowErrors.push(`Email "${email}" already exists in public.employees (Protected).`);
+          }
+          let matchedRole = void 0;
+          if (!roleStr) {
+            rowErrors.push("Missing Designation / Role.");
+          } else {
+            matchedRole = roleMap.get(roleStr.toLowerCase());
+            if (!matchedRole) {
+              rowErrors.push(`Designation "${roleStr}" is not recognized in public.roles.`);
+            }
+          }
+          let matchedLocation = void 0;
+          if (!locStr) {
+            rowErrors.push("Missing Operating Location.");
+          } else {
+            matchedLocation = locationMap.get(locStr.toLowerCase());
+            if (!matchedLocation) {
+              rowErrors.push(`Location "${locStr}" is not recognized in public.locations.`);
+            }
+          }
+          const parsedRow = {
+            rowNumber: rowNum,
+            employee_id: empId || `ROW_${rowNum}`,
+            full_name: fullName,
+            email,
+            mobile_number: mobile,
+            role_name: matchedRole?.name || roleStr,
+            location_name: matchedLocation?.city || matchedLocation?.name || locStr,
+            reporting_manager_employee_id: mgrEmpId,
+            reporting_manager_name: mgrName,
+            employment_status,
+            skillup_access,
+            role_id: matchedRole ? Number(matchedRole.id) : void 0,
+            location_id: matchedLocation ? Number(matchedLocation.id) : void 0,
+            isValid: rowErrors.length === 0,
+            errors: rowErrors
+          };
+          if (rowErrors.length === 0) {
+            validRows.push(parsedRow);
+          } else {
+            invalidRows.push(parsedRow);
+            rowErrors.forEach((err) => {
+              allErrors.push({
+                row: rowNum,
+                employee_id: empId || `Row #${rowNum}`,
+                error: err
+              });
+            });
+          }
+        });
+        const res = {
+          totalRows: dataRows.length,
+          validRows,
+          invalidRows,
+          duplicateRowsCount,
+          allErrors
+        };
+        setValidationResult(res);
+        setStep("preview");
+        setActiveTab(invalidRows.length > 0 ? "errors" : "valid");
+      } catch (err) {
+        console.error("Error parsing CSV:", err);
+        showError(err?.message || "Failed to parse CSV file.", "Parsing Error");
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    const handleExecuteImport = async () => {
+      if (!validationResult || validationResult.validRows.length === 0) {
+        showError("No valid rows available to import.", "Validation Block");
+        return;
+      }
+      setIsProcessing(true);
+      try {
+        const summary = await insertBulkEmployees(validationResult.validRows);
+        setImportSummary(summary);
+        setStep("result");
+        showSuccess(
+          `Successfully imported ${summary.successfullyImported} employees into public.employees.`,
+          "Bulk Import Completed"
+        );
+        onSuccess();
+      } catch (err) {
+        console.error("Error during bulk import execution:", err);
+        showError(err?.message || "Failed to insert bulk employee records.", "Import Error");
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    return /* @__PURE__ */ import_react16.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: "Bulk Employee Import",
+        subtitle: "Upload and validate employee master CSV with row-level error reporting",
+        maxWidth: "3xl"
+      },
+      /* @__PURE__ */ import_react16.default.createElement("div", { className: "space-y-4 text-xs font-sans" }, step === "upload" && /* @__PURE__ */ import_react16.default.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-4 bg-orange-50/70 border border-orange-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3" }, /* @__PURE__ */ import_react16.default.createElement("div", null, /* @__PURE__ */ import_react16.default.createElement("h4", { className: "font-bold text-slate-900 text-xs" }, "Need the official template?"), /* @__PURE__ */ import_react16.default.createElement("p", { className: "text-[11.5px] text-slate-600 mt-0.5" }, "Download the formatted CSV template with required columns and valid designations.")), /* @__PURE__ */ import_react16.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: handleDownloadTemplate,
+          className: "px-3.5 py-2 bg-white border border-orange-300 text-orange-700 hover:bg-orange-100 rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-sm shrink-0"
+        },
+        /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-4 h-4 text-orange-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react16.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" })),
+        /* @__PURE__ */ import_react16.default.createElement("span", null, "Download CSV Template")
+      )), /* @__PURE__ */ import_react16.default.createElement(
+        "div",
+        {
+          onClick: () => fileInputRef.current?.click(),
+          onDragOver: (e) => e.preventDefault(),
+          onDrop: (e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+              handleFileChange(e.dataTransfer.files[0]);
+            }
+          },
+          className: "border-2 border-dashed border-slate-300 hover:border-orange-500 bg-slate-50 hover:bg-orange-50/30 rounded-2xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center space-y-3"
+        },
+        /* @__PURE__ */ import_react16.default.createElement(
+          "input",
+          {
+            ref: fileInputRef,
+            type: "file",
+            accept: ".csv",
+            className: "hidden",
+            onChange: (e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleFileChange(e.target.files[0]);
+              }
+            }
+          }
+        ),
+        /* @__PURE__ */ import_react16.default.createElement("div", { className: "w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center shadow-inner" }, /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-6 h-6", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react16.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" }))),
+        /* @__PURE__ */ import_react16.default.createElement("div", { className: "space-y-1" }, /* @__PURE__ */ import_react16.default.createElement("p", { className: "font-bold text-slate-800 text-sm" }, "Click to choose or drag & drop CSV file"), /* @__PURE__ */ import_react16.default.createElement("p", { className: "text-[11px] text-slate-400" }, "Strict validation will verify all employee IDs, emails, roles, and locations."))
+      ), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 text-[11.5px] text-slate-600" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "flex items-center gap-1.5 font-bold text-slate-800 text-xs" }, /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-4 h-4 text-orange-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react16.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react16.default.createElement("span", null, "Import Instructions & Column Guidelines")), /* @__PURE__ */ import_react16.default.createElement("ul", { className: "space-y-1.5 list-disc pl-5 text-slate-600 leading-relaxed" }, /* @__PURE__ */ import_react16.default.createElement("li", null, /* @__PURE__ */ import_react16.default.createElement("strong", { className: "text-slate-800" }, "Employee ID:"), " Unique alphanumeric ID (e.g. EMP001). Must not already exist in the system."), /* @__PURE__ */ import_react16.default.createElement("li", null, /* @__PURE__ */ import_react16.default.createElement("strong", { className: "text-slate-800" }, "Full Name & Official Email:"), " Mandatory. Email must follow official corporate format (e.g. name@rupeek.com)."), /* @__PURE__ */ import_react16.default.createElement("li", null, /* @__PURE__ */ import_react16.default.createElement("strong", { className: "text-slate-800" }, "Designation & Location:"), " Must match system designations and operating cities exactly."), /* @__PURE__ */ import_react16.default.createElement("li", null, /* @__PURE__ */ import_react16.default.createElement("strong", { className: "text-slate-800" }, "Employment Status:"), " Allowed values are ", /* @__PURE__ */ import_react16.default.createElement("code", { className: "px-1 py-0.5 bg-slate-200 rounded font-mono text-[10.5px]" }, "ACTIVE"), " or ", /* @__PURE__ */ import_react16.default.createElement("code", { className: "px-1 py-0.5 bg-slate-200 rounded font-mono text-[10.5px]" }, "INACTIVE"), " (defaults to ACTIVE if omitted)."), /* @__PURE__ */ import_react16.default.createElement("li", null, /* @__PURE__ */ import_react16.default.createElement("strong", { className: "text-slate-800" }, "SkillUp Access:"), " Allowed values are ", /* @__PURE__ */ import_react16.default.createElement("code", { className: "px-1 py-0.5 bg-slate-200 rounded font-mono text-[10.5px]" }, "ENABLED"), " or ", /* @__PURE__ */ import_react16.default.createElement("code", { className: "px-1 py-0.5 bg-slate-200 rounded font-mono text-[10.5px]" }, "DISABLED"), " (defaults to ENABLED if omitted)."), /* @__PURE__ */ import_react16.default.createElement("li", null, /* @__PURE__ */ import_react16.default.createElement("strong", { className: "text-slate-800" }, "Atomicity & Zero-Overwrite:"), " Existing production employees will never be modified. All valid records in a confirmed batch are committed atomically in a single production transaction."))), isProcessing && /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-4 bg-slate-100 rounded-xl flex items-center justify-center gap-2 text-slate-700 font-semibold" }, /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-4 h-4 animate-spin text-orange-600", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react16.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react16.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })), /* @__PURE__ */ import_react16.default.createElement("span", null, "Validating CSV rows against public.employees..."))), step === "preview" && validationResult && /* @__PURE__ */ import_react16.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "grid grid-cols-4 gap-3" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10.5px] font-bold text-slate-500 uppercase" }, "Total Rows"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-lg font-black text-slate-900 mt-0.5" }, validationResult.totalRows)), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10.5px] font-bold text-emerald-700 uppercase" }, "Valid Rows"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-lg font-black text-emerald-800 mt-0.5" }, validationResult.validRows.length)), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-rose-50 border border-rose-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10.5px] font-bold text-rose-700 uppercase" }, "Invalid Rows"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-lg font-black text-rose-800 mt-0.5" }, validationResult.invalidRows.length)), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-amber-50 border border-amber-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10.5px] font-bold text-amber-700 uppercase" }, "Duplicates"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-lg font-black text-amber-800 mt-0.5" }, validationResult.duplicateRowsCount))), /* @__PURE__ */ import_react16.default.createElement("div", { className: "flex items-center gap-2 border-b border-slate-200" }, /* @__PURE__ */ import_react16.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setActiveTab("errors"),
+          className: `pb-2 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 ${activeTab === "errors" ? "border-rose-600 text-rose-700" : "border-transparent text-slate-500 hover:text-slate-700"}`
+        },
+        /* @__PURE__ */ import_react16.default.createElement("span", null, "Row-Level Errors"),
+        /* @__PURE__ */ import_react16.default.createElement("span", { className: "px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800 text-[10px]" }, validationResult.allErrors.length)
+      ), /* @__PURE__ */ import_react16.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setActiveTab("valid"),
+          className: `pb-2 px-3 text-xs font-bold transition border-b-2 flex items-center gap-1.5 ${activeTab === "valid" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-700"}`
+        },
+        /* @__PURE__ */ import_react16.default.createElement("span", null, "Valid Records Preview"),
+        /* @__PURE__ */ import_react16.default.createElement("span", { className: "px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]" }, validationResult.validRows.length)
+      )), activeTab === "errors" && /* @__PURE__ */ import_react16.default.createElement("div", { className: "max-h-60 overflow-y-auto rounded-xl border border-rose-200 bg-rose-50/30 p-2 space-y-1.5" }, validationResult.allErrors.length === 0 ? /* @__PURE__ */ import_react16.default.createElement("div", { className: "py-6 text-center text-emerald-700 font-bold" }, "No validation errors found in this CSV. All rows are valid for import.") : validationResult.allErrors.map((err, i) => /* @__PURE__ */ import_react16.default.createElement("div", { key: i, className: "p-2 bg-white rounded-lg border border-rose-200 flex items-start gap-2.5" }, /* @__PURE__ */ import_react16.default.createElement("span", { className: "px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-mono font-bold text-[10px] shrink-0" }, "Row ", err.row), /* @__PURE__ */ import_react16.default.createElement("span", { className: "font-mono text-slate-700 font-bold shrink-0" }, err.employee_id, ":"), /* @__PURE__ */ import_react16.default.createElement("span", { className: "text-rose-700 font-medium text-xs" }, err.error)))), activeTab === "valid" && /* @__PURE__ */ import_react16.default.createElement("div", { className: "max-h-60 overflow-y-auto rounded-xl border border-slate-200" }, /* @__PURE__ */ import_react16.default.createElement("table", { className: "w-full text-left text-[11px]" }, /* @__PURE__ */ import_react16.default.createElement("thead", { className: "bg-slate-100 text-slate-600 font-bold sticky top-0" }, /* @__PURE__ */ import_react16.default.createElement("tr", null, /* @__PURE__ */ import_react16.default.createElement("th", { className: "p-2" }, "Row"), /* @__PURE__ */ import_react16.default.createElement("th", { className: "p-2" }, "ID"), /* @__PURE__ */ import_react16.default.createElement("th", { className: "p-2" }, "Name"), /* @__PURE__ */ import_react16.default.createElement("th", { className: "p-2" }, "Email"), /* @__PURE__ */ import_react16.default.createElement("th", { className: "p-2" }, "Designation"), /* @__PURE__ */ import_react16.default.createElement("th", { className: "p-2" }, "Location"))), /* @__PURE__ */ import_react16.default.createElement("tbody", { className: "divide-y divide-slate-100" }, validationResult.validRows.length === 0 ? /* @__PURE__ */ import_react16.default.createElement("tr", null, /* @__PURE__ */ import_react16.default.createElement("td", { colSpan: 6, className: "py-6 text-center text-slate-400" }, "No valid rows to preview.")) : validationResult.validRows.map((r) => /* @__PURE__ */ import_react16.default.createElement("tr", { key: r.rowNumber, className: "hover:bg-slate-50 font-medium" }, /* @__PURE__ */ import_react16.default.createElement("td", { className: "p-2 font-mono text-slate-400" }, r.rowNumber), /* @__PURE__ */ import_react16.default.createElement("td", { className: "p-2 font-mono font-bold text-orange-600" }, r.employee_id), /* @__PURE__ */ import_react16.default.createElement("td", { className: "p-2 font-bold text-slate-900" }, r.full_name), /* @__PURE__ */ import_react16.default.createElement("td", { className: "p-2 text-slate-600" }, r.email), /* @__PURE__ */ import_react16.default.createElement("td", { className: "p-2 text-slate-800" }, r.role_name), /* @__PURE__ */ import_react16.default.createElement("td", { className: "p-2 text-slate-700" }, r.location_name)))))), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-[11px] flex items-center gap-2" }, /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-4 h-4 text-slate-500 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react16.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react16.default.createElement("span", null, "Existing 813 production employee records are strictly protected and will not be overwritten.")), /* @__PURE__ */ import_react16.default.createElement("div", { className: "flex items-center justify-between pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react16.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setStep("upload"),
+          disabled: isProcessing,
+          className: "px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition"
+        },
+        "Choose Another File"
+      ), /* @__PURE__ */ import_react16.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: handleExecuteImport,
+          disabled: isProcessing || validationResult.validRows.length === 0,
+          className: "px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center gap-2 disabled:opacity-50"
+        },
+        isProcessing ? /* @__PURE__ */ import_react16.default.createElement(import_react16.default.Fragment, null, /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react16.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react16.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })), /* @__PURE__ */ import_react16.default.createElement("span", null, "Importing Valid Employees...")) : /* @__PURE__ */ import_react16.default.createElement("span", null, "Import ", validationResult.validRows.length, " Valid Employees")
+      ))), step === "result" && importSummary && /* @__PURE__ */ import_react16.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-5 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-2" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto" }, /* @__PURE__ */ import_react16.default.createElement("svg", { className: "w-6 h-6", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react16.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" }))), /* @__PURE__ */ import_react16.default.createElement("h4", { className: "text-base font-bold text-emerald-900" }, "Bulk Import Processed"), /* @__PURE__ */ import_react16.default.createElement("p", { className: "text-xs text-emerald-800" }, "Live database has been updated and dashboard counts synchronized.")), /* @__PURE__ */ import_react16.default.createElement("div", { className: "grid grid-cols-3 gap-3" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10px] font-bold text-slate-500 uppercase" }, "Processed"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-base font-black text-slate-900 mt-0.5" }, importSummary.totalProcessed)), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10px] font-bold text-emerald-700 uppercase" }, "Imported"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-base font-black text-emerald-800 mt-0.5" }, importSummary.successfullyImported)), /* @__PURE__ */ import_react16.default.createElement("div", { className: "p-3 bg-rose-50 border border-rose-200 rounded-xl text-center" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-[10px] font-bold text-rose-700 uppercase" }, "Rejected / Skipped"), /* @__PURE__ */ import_react16.default.createElement("div", { className: "text-base font-black text-rose-800 mt-0.5" }, importSummary.rejectedCount))), /* @__PURE__ */ import_react16.default.createElement("div", { className: "flex justify-end pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react16.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          className: "px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition"
+        },
+        "Close & View Directory"
+      ))))
+    );
+  };
+
   // src/pages/EmployeesPage.tsx
   var EmployeesPage = ({ initialSearch = "" }) => {
-    const [employees, setEmployees] = (0, import_react13.useState)([]);
-    const [totalCount, setTotalCount] = (0, import_react13.useState)(0);
-    const [isLoading, setIsLoading] = (0, import_react13.useState)(true);
-    const [selectedEmployee, setSelectedEmployee] = (0, import_react13.useState)(null);
-    const { showInfo } = useToast();
-    const [filters, setFilters] = (0, import_react13.useState)({
+    const { canManageEmployees, canManageAccess } = useAuth();
+    const { showInfo, showSuccess, showError } = useToast();
+    const [employees, setEmployees] = (0, import_react17.useState)([]);
+    const [totalCount, setTotalCount] = (0, import_react17.useState)(0);
+    const [locations, setLocations] = (0, import_react17.useState)([]);
+    const [roles, setRoles] = (0, import_react17.useState)([]);
+    const [isLoading, setIsLoading] = (0, import_react17.useState)(true);
+    const [queryError, setQueryError] = (0, import_react17.useState)(null);
+    const [selectedEmployee, setSelectedEmployee] = (0, import_react17.useState)(null);
+    const [editingEmployee, setEditingEmployee] = (0, import_react17.useState)(null);
+    const [togglingState, setTogglingState] = (0, import_react17.useState)(null);
+    const [isAddModalOpen, setIsAddModalOpen] = (0, import_react17.useState)(false);
+    const [isBulkModalOpen, setIsBulkModalOpen] = (0, import_react17.useState)(false);
+    const [learningActivity, setLearningActivity] = (0, import_react17.useState)(null);
+    const [isLoadingActivity, setIsLoadingActivity] = (0, import_react17.useState)(false);
+    const [filters, setFilters] = (0, import_react17.useState)({
       search: initialSearch,
       location: "ALL",
       role: "ALL",
@@ -34217,90 +36085,66 @@ ${suffix}`;
       page: 1,
       pageSize: 10
     });
-    const locationsList = [
-      "Bangalore",
-      "Mumbai",
-      "Delhi NCR",
-      "Hyderabad",
-      "Chennai",
-      "Pune",
-      "Kolkata",
-      "Ahmedabad",
-      "Jaipur",
-      "Lucknow",
-      "Indore",
-      "Chandigarh",
-      "Kochi",
-      "Coimbatore",
-      "Surat",
-      "Nagpur",
-      "Bhopal",
-      "Visakhapatnam",
-      "Patna",
-      "Vadodara",
-      "Ghaziabad",
-      "Ludhiana",
-      "Agra",
-      "Nashik",
-      "Faridabad",
-      "Meerut"
-    ];
-    const rolesList = [
-      "Relationship Manager",
-      "Territory Branch Manager (TBM)",
-      "Area Branch Manager (ABM)",
-      "Regional Business Head (RBH)",
-      "Quality & Appraisal Officer",
-      "Loan Verification Specialist",
-      "Gold Valuation Expert",
-      "Customer Experience Lead",
-      "Risk & Audit Officer",
-      "Collections Specialist",
-      "Branch Operations Lead",
-      "Sales Team Lead",
-      "Regional Training Manager",
-      "Compliance Specialist",
-      "Business Development Associate"
-    ];
-    const loadEmployees = (0, import_react13.useCallback)(async () => {
+    (0, import_react17.useEffect)(() => {
+      let isMounted = true;
+      async function loadFilterOptions() {
+        try {
+          const [locs, rls] = await Promise.all([
+            fetchLocations(),
+            fetchRoles()
+          ]);
+          if (isMounted) {
+            setLocations(locs);
+            setRoles(rls);
+          }
+        } catch (err) {
+          console.error("Error fetching filter options:", err);
+        }
+      }
+      loadFilterOptions();
+      return () => {
+        isMounted = false;
+      };
+    }, []);
+    const loadEmployees = (0, import_react17.useCallback)(async () => {
       setIsLoading(true);
+      setQueryError(null);
       try {
         const result = await fetchEmployees(filters);
         setEmployees(result.employees);
         setTotalCount(result.totalCount);
       } catch (err) {
-        console.error("Error fetching employees:", err);
-        const sampleList = Array.from({ length: 15 }, (_, i) => {
-          const idNum = (filters.page - 1) * filters.pageSize + i + 1;
-          const paddedId = String(idNum).padStart(3, "0");
-          const names = ["Aarav Sharma", "Priya Patel", "Rohan Verma", "Ananya Iyer", "Vikram Singh", "Deepa Rao", "Karthik Nair", "Sneha Deshmukh", "Amit Joshi", "Neha Gupta", "Rahul Kulkarni", "Pooja Reddy", "Siddharth Menon", "Kavita Pillai", "Manoj Kumar"];
-          const name = names[i % names.length];
-          const loc = locationsList[i % locationsList.length];
-          const rName = rolesList[i % rolesList.length];
-          return {
-            id: idNum,
-            employee_id: `EMP${paddedId}`,
-            full_name: `${name} ${idNum > 15 ? `(${idNum})` : ""}`.trim(),
-            email: `${name.toLowerCase().replace(" ", ".")}${idNum > 15 ? idNum : ""}@rupeek.com`,
-            mobile_number: `+91 98${String(1e7 + idNum * 777).slice(0, 8)}`,
-            role_name: rName,
-            location_name: loc,
-            reporting_manager_name: i % 4 === 0 ? "Amit Kumar" : i % 3 === 0 ? "Priya Sharma" : "Raj Kumar",
-            reporting_manager_employee_id: `EMP00${i % 5 + 1}`,
-            employment_status: i === 7 || i === 13 ? "INACTIVE" : "ACTIVE",
-            skillup_access: i === 11 || i === 14 ? "DISABLED" : "ENABLED",
-            created_at: "2026-01-15T09:30:00Z"
-          };
-        });
-        setEmployees(sampleList);
-        setTotalCount(813);
+        console.error("Error fetching employees from Supabase:", err);
+        setEmployees([]);
+        setTotalCount(0);
+        setQueryError(err?.message || "Failed to load employees from Supabase.");
       } finally {
         setIsLoading(false);
       }
     }, [filters]);
-    (0, import_react13.useEffect)(() => {
+    (0, import_react17.useEffect)(() => {
       loadEmployees();
     }, [loadEmployees]);
+    (0, import_react17.useEffect)(() => {
+      let isMounted = true;
+      if (selectedEmployee) {
+        setIsLoadingActivity(true);
+        fetchEmployeeLearningActivity(selectedEmployee.employee_id).then((activity) => {
+          if (isMounted) {
+            setLearningActivity(activity);
+          }
+        }).catch(() => {
+          if (isMounted) setLearningActivity(null);
+        }).finally(() => {
+          if (isMounted) setIsLoadingActivity(false);
+        });
+      } else {
+        setLearningActivity(null);
+      }
+      return () => {
+        isMounted = false;
+      };
+    }, [selectedEmployee]);
     const handleSearchChange = (val) => {
       setFilters((prev) => ({ ...prev, search: val, page: 1 }));
     };
@@ -34318,15 +36162,87 @@ ${suffix}`;
         pageSize: 10
       });
     };
-    return /* @__PURE__ */ import_react13.default.createElement("div", { className: "space-y-6 animate-fade-in font-sans" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" }, /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("h2", { className: "text-xl font-bold text-slate-900 tracking-tight" }, "Employee Directory"), /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Querying ", /* @__PURE__ */ import_react13.default.createElement("strong", { className: "text-slate-800 font-semibold" }, totalCount), " business-team employees across 26 operating locations.")), /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react13.default.createElement(
+    const handleExportRoster = () => {
+      if (employees.length === 0) {
+        showError("No employee records matching current criteria to export.", "Export Empty");
+        return;
+      }
+      try {
+        const headers = [
+          "Employee ID",
+          "Full Name",
+          "Official Email ID",
+          "Mobile Number",
+          "Designation",
+          "Operating Location",
+          "Reporting Manager Employee ID",
+          "Reporting Manager Name",
+          "Employment Status",
+          "SkillUp Access"
+        ].join(",");
+        const csvRows = employees.map((emp) => {
+          const escapeCsv = (str) => `"${(str || "").replace(/"/g, '""')}"`;
+          return [
+            escapeCsv(emp.employee_id),
+            escapeCsv(emp.full_name),
+            escapeCsv(emp.email),
+            escapeCsv(emp.mobile_number),
+            escapeCsv(emp.role_name || (emp.role_id ? `Role #${emp.role_id}` : "")),
+            escapeCsv(emp.location_name || (emp.location_id ? `Location #${emp.location_id}` : "")),
+            escapeCsv(emp.reporting_manager_employee_id),
+            escapeCsv(emp.reporting_manager_name),
+            escapeCsv(emp.employment_status),
+            escapeCsv(emp.skillup_access)
+          ].join(",");
+        });
+        const fullCsv = [headers, ...csvRows].join("\n");
+        const blob = new Blob([fullCsv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `SkillUp_Employees_Roster_Page${filters.page}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showSuccess(`Exported ${employees.length} records to CSV.`, "Roster Exported");
+      } catch (err) {
+        console.error("Error exporting roster:", err);
+        showError("Failed to generate roster export.", "Export Error");
+      }
+    };
+    return /* @__PURE__ */ import_react17.default.createElement("div", { className: "space-y-6 animate-fade-in font-sans" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4" }, /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement("h2", { className: "text-xl font-bold text-slate-900 tracking-tight" }, "Employee Directory & Access Control"), /* @__PURE__ */ import_react17.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Querying ", /* @__PURE__ */ import_react17.default.createElement("strong", { className: "text-slate-800 font-semibold" }, totalCount), " business-team employees across ", locations.length > 0 ? `${locations.length} operating locations` : "operating locations", ".")), /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ import_react17.default.createElement(
       "button",
       {
-        onClick: () => showInfo("CSV report generation initialized from database records.", "Exporting Employee Roster"),
+        onClick: handleExportRoster,
         className: "px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
       },
-      /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-3.5 h-3.5 text-slate-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" })),
-      /* @__PURE__ */ import_react13.default.createElement("span", null, "Export Roster")
-    ))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "lg:col-span-2 relative" }, /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-4 h-4 text-slate-400 absolute left-3.5 top-3", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" })), /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-3.5 h-3.5 text-slate-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" })),
+      /* @__PURE__ */ import_react17.default.createElement("span", null, "Export Roster")
+    ), canManageEmployees && /* @__PURE__ */ import_react17.default.createElement(
+      "button",
+      {
+        onClick: () => setIsBulkModalOpen(true),
+        className: "px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 transition shadow-sm"
+      },
+      /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-3.5 h-3.5 text-slate-300", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" })),
+      /* @__PURE__ */ import_react17.default.createElement("span", null, "Bulk Import CSV")
+    ), canManageEmployees && /* @__PURE__ */ import_react17.default.createElement(
+      "button",
+      {
+        onClick: () => setIsAddModalOpen(true),
+        className: "px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm"
+      },
+      /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6v6m0 0v6m0-6h6m-6 0H6" })),
+      /* @__PURE__ */ import_react17.default.createElement("span", null, "+ Add Employee")
+    ))), queryError && /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-4 h-4 text-rose-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react17.default.createElement("span", null, "Error querying Supabase: ", queryError)), /* @__PURE__ */ import_react17.default.createElement(
+      "button",
+      {
+        onClick: loadEmployees,
+        className: "px-3 py-1 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 transition"
+      },
+      "Retry Query"
+    )), /* @__PURE__ */ import_react17.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm space-y-3" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "lg:col-span-2 relative" }, /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-4 h-4 text-slate-400 absolute left-3.5 top-3", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" })), /* @__PURE__ */ import_react17.default.createElement(
       "input",
       {
         type: "text",
@@ -34335,107 +36251,129 @@ ${suffix}`;
         placeholder: "Search by Employee ID, Name, Email, or Manager...",
         className: "w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition"
       }
-    ), filters.search && /* @__PURE__ */ import_react13.default.createElement(
+    ), filters.search && /* @__PURE__ */ import_react17.default.createElement(
       "button",
       {
         onClick: () => handleSearchChange(""),
         className: "absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
       },
-      /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M6 18L18 6M6 6l12 12" }))
-    )), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M6 18L18 6M6 6l12 12" }))
+    )), /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement(
       "select",
       {
         value: filters.location,
         onChange: (e) => handleFilterChange("location", e.target.value),
         className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
       },
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "ALL" }, "All Locations (26 Cities)"),
-      locationsList.map((loc) => /* @__PURE__ */ import_react13.default.createElement("option", { key: loc, value: loc }, loc))
-    )), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "ALL" }, "All Locations ", locations.length > 0 ? `(${locations.length} Locations)` : ""),
+      locations.map((loc) => /* @__PURE__ */ import_react17.default.createElement("option", { key: loc.id, value: String(loc.id) }, loc.city || loc.name))
+    )), /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement(
       "select",
       {
         value: filters.role,
         onChange: (e) => handleFilterChange("role", e.target.value),
         className: "w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
       },
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "ALL" }, "All Roles (15 Designations)"),
-      rolesList.map((r) => /* @__PURE__ */ import_react13.default.createElement("option", { key: r, value: r }, r))
-    )), /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "ALL" }, "All Roles ", roles.length > 0 ? `(${roles.length} Roles)` : ""),
+      roles.map((r) => /* @__PURE__ */ import_react17.default.createElement("option", { key: r.id, value: String(r.id) }, r.name))
+    )), /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react17.default.createElement(
       "select",
       {
         value: filters.employmentStatus,
         onChange: (e) => handleFilterChange("employmentStatus", e.target.value),
         className: "w-1/2 px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
       },
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "ALL" }, "Status: All"),
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "ACTIVE" }, "Active"),
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "INACTIVE" }, "Inactive")
-    ), /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "ALL" }, "Status: All"),
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "ACTIVE" }, "Active"),
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "INACTIVE" }, "Inactive")
+    ), /* @__PURE__ */ import_react17.default.createElement(
       "select",
       {
         value: filters.skillUpAccess,
         onChange: (e) => handleFilterChange("skillUpAccess", e.target.value),
         className: "w-1/2 px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500"
       },
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "ALL" }, "Access: All"),
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "ENABLED" }, "Enabled"),
-      /* @__PURE__ */ import_react13.default.createElement("option", { value: "DISABLED" }, "Disabled")
-    ))), (filters.search || filters.location !== "ALL" || filters.role !== "ALL" || filters.employmentStatus !== "ALL" || filters.skillUpAccess !== "ALL") && /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center justify-between pt-2 border-t border-slate-100 text-xs" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-slate-400 font-medium" }, "Active filters:"), filters.search && /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: "primary", size: "sm" }, "Search: ", filters.search), filters.location !== "ALL" && /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: "neutral", size: "sm" }, "City: ", filters.location), filters.role !== "ALL" && /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: "neutral", size: "sm" }, "Role: ", filters.role), filters.employmentStatus !== "ALL" && /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: "active", size: "sm" }, "Status: ", filters.employmentStatus), filters.skillUpAccess !== "ALL" && /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: "enabled", size: "sm" }, "Access: ", filters.skillUpAccess)), /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "ALL" }, "Access: All"),
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "ENABLED" }, "Enabled"),
+      /* @__PURE__ */ import_react17.default.createElement("option", { value: "DISABLED" }, "Disabled")
+    ))), (filters.search || filters.location !== "ALL" || filters.role !== "ALL" || filters.employmentStatus !== "ALL" || filters.skillUpAccess !== "ALL") && /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center justify-between pt-2 border-t border-slate-100 text-xs" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-slate-400 font-medium" }, "Active filters:"), filters.search && /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: "primary", size: "sm" }, "Search: ", filters.search), filters.location !== "ALL" && /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: "neutral", size: "sm" }, "Location Filter"), filters.role !== "ALL" && /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: "neutral", size: "sm" }, "Role Filter"), filters.employmentStatus !== "ALL" && /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: "active", size: "sm" }, "Status: ", filters.employmentStatus), filters.skillUpAccess !== "ALL" && /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: "enabled", size: "sm" }, "Access: ", filters.skillUpAccess)), /* @__PURE__ */ import_react17.default.createElement(
       "button",
       {
         onClick: handleResetFilters,
         className: "text-orange-600 hover:text-orange-700 font-bold transition"
       },
       "Clear All"
-    ))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "overflow-x-auto" }, /* @__PURE__ */ import_react13.default.createElement("table", { className: "w-full text-left text-xs" }, /* @__PURE__ */ import_react13.default.createElement("thead", null, /* @__PURE__ */ import_react13.default.createElement("tr", { className: "bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10.5px]" }, /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4" }, "Employee ID"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4" }, "Full Name & Email"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4" }, "Mobile Number"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4" }, "Designation"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4" }, "Operating Location"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4" }, "Reporting Manager"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4 text-center" }, "Employment"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4 text-center" }, "SkillUp Access"), /* @__PURE__ */ import_react13.default.createElement("th", { className: "py-3.5 px-4 text-right" }, "Action"))), /* @__PURE__ */ import_react13.default.createElement("tbody", { className: "divide-y divide-slate-100 font-medium text-slate-700" }, isLoading ? Array.from({ length: 5 }).map((_, i) => /* @__PURE__ */ import_react13.default.createElement("tr", { key: i, className: "animate-pulse" }, /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-4 bg-slate-200 rounded w-16" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-4 bg-slate-200 rounded w-32 mb-1" }), /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-3 bg-slate-100 rounded w-44" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-24" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-28" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-20" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-24" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4 text-center" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-5 bg-slate-100 rounded-full w-16 mx-auto" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4 text-center" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-5 bg-slate-100 rounded-full w-16 mx-auto" })), /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-4 px-4 text-right" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "h-7 bg-slate-100 rounded-lg w-12 ml-auto" })))) : employees.length === 0 ? /* @__PURE__ */ import_react13.default.createElement("tr", null, /* @__PURE__ */ import_react13.default.createElement("td", { colSpan: 9, className: "py-12 text-center text-slate-500" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "max-w-xs mx-auto space-y-2" }, /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-8 h-8 text-slate-300 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" })), /* @__PURE__ */ import_react13.default.createElement("div", { className: "font-bold text-slate-800 text-sm" }, "No Employees Found"), /* @__PURE__ */ import_react13.default.createElement("p", { className: "text-xs text-slate-400" }, "No records matching your search or active filter criteria."), /* @__PURE__ */ import_react13.default.createElement(
+    ))), /* @__PURE__ */ import_react17.default.createElement("div", { className: "bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "overflow-x-auto" }, /* @__PURE__ */ import_react17.default.createElement("table", { className: "w-full text-left text-xs" }, /* @__PURE__ */ import_react17.default.createElement("thead", null, /* @__PURE__ */ import_react17.default.createElement("tr", { className: "bg-slate-50/80 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10.5px]" }, /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4" }, "Employee ID"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4" }, "Full Name & Email"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4" }, "Mobile Number"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4" }, "Designation"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4" }, "Operating Location"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4" }, "Reporting Manager"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4 text-center" }, "Employment"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4 text-center" }, "SkillUp Access"), /* @__PURE__ */ import_react17.default.createElement("th", { className: "py-3.5 px-4 text-right" }, "Actions"))), /* @__PURE__ */ import_react17.default.createElement("tbody", { className: "divide-y divide-slate-100 font-medium text-slate-700" }, isLoading ? Array.from({ length: 5 }).map((_, i) => /* @__PURE__ */ import_react17.default.createElement("tr", { key: i, className: "animate-pulse" }, /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-200 rounded w-16" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-200 rounded w-32 mb-1" }), /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-3 bg-slate-100 rounded w-44" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-24" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-28" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-20" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-100 rounded w-24" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4 text-center" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-5 bg-slate-100 rounded-full w-16 mx-auto" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4 text-center" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-5 bg-slate-100 rounded-full w-16 mx-auto" })), /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-4 px-4 text-right" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-7 bg-slate-100 rounded-lg w-20 ml-auto" })))) : employees.length === 0 ? /* @__PURE__ */ import_react17.default.createElement("tr", null, /* @__PURE__ */ import_react17.default.createElement("td", { colSpan: 9, className: "py-12 text-center text-slate-500" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "max-w-xs mx-auto space-y-2" }, /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-8 h-8 text-slate-300 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" })), /* @__PURE__ */ import_react17.default.createElement("div", { className: "font-bold text-slate-800 text-sm" }, "No Employees Found"), /* @__PURE__ */ import_react17.default.createElement("p", { className: "text-xs text-slate-400" }, "No records matching your search or active filter criteria."), /* @__PURE__ */ import_react17.default.createElement(
       "button",
       {
         onClick: handleResetFilters,
         className: "mt-2 px-3 py-1.5 bg-orange-50 text-orange-700 rounded-xl font-semibold text-xs hover:bg-orange-100 transition"
       },
       "Reset All Filters"
-    )))) : employees.map((emp) => /* @__PURE__ */ import_react13.default.createElement(
+    )))) : employees.map((emp) => /* @__PURE__ */ import_react17.default.createElement(
       "tr",
       {
-        key: emp.employee_id,
+        key: emp.employee_id || emp.id,
         className: "hover:bg-slate-50/80 transition cursor-pointer",
         onClick: () => setSelectedEmployee(emp)
       },
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 font-mono font-bold text-orange-600" }, emp.employee_id),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-2.5" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0" }, emp.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("div", { className: "font-bold text-slate-900" }, emp.full_name), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-[11px] text-slate-500 font-normal" }, emp.email)))),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 font-mono text-slate-600 text-[11.5px]" }, emp.mobile_number || "\u2014"),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 text-slate-800 font-semibold" }, emp.role_name || "Business Associate"),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 text-slate-600" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-1.5" }, /* @__PURE__ */ import_react13.default.createElement("svg", { className: "w-3.5 h-3.5 text-slate-400", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" }), /* @__PURE__ */ import_react13.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 11a3 3 0 11-6 0 3 3 0 016 0z" })), /* @__PURE__ */ import_react13.default.createElement("span", null, emp.location_name || "Bangalore"))),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 text-slate-700" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "font-medium" }, emp.reporting_manager_name || "Amit Kumar"), emp.reporting_manager_employee_id && /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-[10px] text-slate-400 font-mono" }, "(", emp.reporting_manager_employee_id, ")")),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 text-center" }, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 font-mono font-bold text-orange-600" }, emp.employee_id),
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2.5" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0" }, emp.full_name?.split(" ").map((n) => n[0]).join("").slice(0, 2) || "EM"), /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement("div", { className: "font-bold text-slate-900" }, emp.full_name), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-[11px] text-slate-500 font-normal" }, emp.email)))),
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 font-mono text-slate-600 text-[11.5px]" }, emp.mobile_number || "\u2014"),
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 text-slate-800 font-semibold" }, emp.role_name || (emp.role_id ? `Role #${emp.role_id}` : "Unassigned")),
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 text-slate-600" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-1.5" }, /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-3.5 h-3.5 text-slate-400", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" }), /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 11a3 3 0 11-6 0 3 3 0 016 0z" })), /* @__PURE__ */ import_react17.default.createElement("span", null, emp.location_name || (emp.location_id ? `Location #${emp.location_id}` : "Unassigned")))),
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 text-slate-700" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "font-medium" }, emp.reporting_manager_name || "\u2014"), emp.reporting_manager_employee_id && /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-[10px] text-slate-400 font-mono" }, "(", emp.reporting_manager_employee_id, ")")),
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 text-center" }, /* @__PURE__ */ import_react17.default.createElement(
         Badge,
         {
           variant: emp.employment_status === "ACTIVE" ? "active" : "inactive",
           size: "sm",
           dot: true
         },
-        emp.employment_status
+        emp.employment_status || "ACTIVE"
       )),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 text-center" }, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 text-center" }, /* @__PURE__ */ import_react17.default.createElement(
         Badge,
         {
           variant: emp.skillup_access === "ENABLED" ? "enabled" : "disabled",
           size: "sm"
         },
-        emp.skillup_access
+        emp.skillup_access || "ENABLED"
       )),
-      /* @__PURE__ */ import_react13.default.createElement("td", { className: "py-3.5 px-4 text-right" }, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("td", { className: "py-3.5 px-4 text-right" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center justify-end gap-1.5", onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ import_react17.default.createElement(
         "button",
         {
-          onClick: (e) => {
-            e.stopPropagation();
-            setSelectedEmployee(emp);
-          },
-          className: "px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 hover:text-orange-600 text-slate-600 font-bold text-xs transition"
+          onClick: () => setSelectedEmployee(emp),
+          className: "px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition",
+          title: "View Employee Profile"
         },
         "View"
-      ))
-    ))))), /* @__PURE__ */ import_react13.default.createElement(
+      ), canManageEmployees && /* @__PURE__ */ import_react17.default.createElement(
+        "button",
+        {
+          onClick: () => setEditingEmployee(emp),
+          className: "px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 font-semibold text-[11px] transition",
+          title: "Edit Employee Master Record"
+        },
+        "Edit"
+      ), canManageAccess && (emp.skillup_access === "ENABLED" ? /* @__PURE__ */ import_react17.default.createElement(
+        "button",
+        {
+          onClick: () => setTogglingState({ employee: emp, targetAccess: "DISABLED" }),
+          className: "px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-[11px] transition",
+          title: "Disable SkillUp Learning Access"
+        },
+        "Disable"
+      ) : /* @__PURE__ */ import_react17.default.createElement(
+        "button",
+        {
+          onClick: () => setTogglingState({ employee: emp, targetAccess: "ENABLED" }),
+          className: "px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-[11px] transition",
+          title: "Enable SkillUp Learning Access"
+        },
+        "Enable"
+      ))))
+    ))))), /* @__PURE__ */ import_react17.default.createElement(
       Pagination,
       {
         currentPage: filters.page,
@@ -34444,7 +36382,7 @@ ${suffix}`;
         onPageChange: (p) => setFilters((prev) => ({ ...prev, page: p })),
         onPageSizeChange: (s) => setFilters((prev) => ({ ...prev, pageSize: s, page: 1 }))
       }
-    )), selectedEmployee && /* @__PURE__ */ import_react13.default.createElement(
+    )), selectedEmployee && /* @__PURE__ */ import_react17.default.createElement(
       Modal,
       {
         isOpen: Boolean(selectedEmployee),
@@ -34453,7 +36391,43 @@ ${suffix}`;
         subtitle: `Master record for ${selectedEmployee.full_name} (${selectedEmployee.employee_id})`,
         maxWidth: "lg"
       },
-      /* @__PURE__ */ import_react13.default.createElement("div", { className: "space-y-5 text-xs" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-base shadow-sm" }, selectedEmployee.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react13.default.createElement("h4", { className: "text-base font-bold text-slate-900" }, selectedEmployee.full_name), /* @__PURE__ */ import_react13.default.createElement("span", { className: "font-mono text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200" }, selectedEmployee.employee_id)), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-slate-500 text-[11px] mt-0.5" }, selectedEmployee.email))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-right space-y-1" }, /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: selectedEmployee.employment_status === "ACTIVE" ? "active" : "inactive", size: "sm", dot: true }, selectedEmployee.employment_status)), /* @__PURE__ */ import_react13.default.createElement("div", null, /* @__PURE__ */ import_react13.default.createElement(Badge, { variant: selectedEmployee.skillup_access === "ENABLED" ? "enabled" : "disabled", size: "sm" }, "Access: ", selectedEmployee.skillup_access)))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Designation / Role"), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-xs font-bold text-slate-800 mt-0.5" }, selectedEmployee.role_name || "Business Associate")), /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Operating Location"), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-xs font-bold text-slate-800 mt-0.5" }, selectedEmployee.location_name || "Bangalore HQ")), /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Official Mobile"), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-xs font-mono font-bold text-slate-800 mt-0.5" }, selectedEmployee.mobile_number || "N/A")), /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Reporting Manager"), /* @__PURE__ */ import_react13.default.createElement("div", { className: "text-xs font-bold text-slate-800 mt-0.5" }, selectedEmployee.reporting_manager_name || "Amit Kumar", selectedEmployee.reporting_manager_employee_id && /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-[11px] font-mono text-slate-400 ml-1" }, "(", selectedEmployee.reporting_manager_employee_id, ")")))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "p-4 bg-orange-50/50 border border-orange-200/60 rounded-2xl space-y-2" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "font-bold text-slate-800" }, "SkillUp Learning Progress"), /* @__PURE__ */ import_react13.default.createElement("span", { className: "text-orange-600 font-bold" }, "4 Courses Assigned")), /* @__PURE__ */ import_react13.default.createElement("div", { className: "w-full bg-slate-200 rounded-full h-2 overflow-hidden" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "bg-orange-500 h-2 rounded-full", style: { width: "75%" } })), /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex items-center justify-between text-[11px] text-slate-500" }, /* @__PURE__ */ import_react13.default.createElement("span", null, "3 Completed \u2022 1 In Progress"), /* @__PURE__ */ import_react13.default.createElement("span", null, "Avg Score: ", /* @__PURE__ */ import_react13.default.createElement("strong", null, "88%")))), /* @__PURE__ */ import_react13.default.createElement("div", { className: "flex justify-end pt-2 border-t border-slate-100" }, /* @__PURE__ */ import_react13.default.createElement(
+      /* @__PURE__ */ import_react17.default.createElement("div", { className: "space-y-5 text-xs" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-4 bg-slate-50 border border-slate-200/80 rounded-2xl flex items-center justify-between" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-base shadow-sm" }, selectedEmployee.full_name?.split(" ").map((n) => n[0]).join("").slice(0, 2) || "EM"), /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react17.default.createElement("h4", { className: "text-base font-bold text-slate-900" }, selectedEmployee.full_name), /* @__PURE__ */ import_react17.default.createElement("span", { className: "font-mono text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200" }, selectedEmployee.employee_id)), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-slate-500 text-[11px] mt-0.5" }, selectedEmployee.email))), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-right space-y-1" }, /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: selectedEmployee.employment_status === "ACTIVE" ? "active" : "inactive", size: "sm", dot: true }, selectedEmployee.employment_status)), /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement(Badge, { variant: selectedEmployee.skillup_access === "ENABLED" ? "enabled" : "disabled", size: "sm" }, "Access: ", selectedEmployee.skillup_access)))), /* @__PURE__ */ import_react17.default.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Designation / Role"), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-xs font-bold text-slate-800 mt-0.5" }, selectedEmployee.role_name || (selectedEmployee.role_id ? `Role #${selectedEmployee.role_id}` : "Unassigned"))), /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Operating Location"), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-xs font-bold text-slate-800 mt-0.5" }, selectedEmployee.location_name || (selectedEmployee.location_id ? `Location #${selectedEmployee.location_id}` : "Unassigned"))), /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Official Mobile"), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-xs font-mono font-bold text-slate-800 mt-0.5" }, selectedEmployee.mobile_number || "\u2014")), /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-3 bg-white border border-slate-200 rounded-xl" }, /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 uppercase tracking-wider" }, "Reporting Manager"), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-xs font-bold text-slate-800 mt-0.5" }, selectedEmployee.reporting_manager_name || "\u2014", selectedEmployee.reporting_manager_employee_id && /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-[11px] font-mono text-slate-400 ml-1" }, "(", selectedEmployee.reporting_manager_employee_id, ")")))), isLoadingActivity ? /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-4 bg-slate-50 border border-slate-200 rounded-2xl animate-pulse space-y-2" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-4 bg-slate-200 rounded w-1/3" }), /* @__PURE__ */ import_react17.default.createElement("div", { className: "h-3 bg-slate-100 rounded w-1/2" })) : learningActivity && learningActivity.assignedCount > 0 ? /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-4 bg-orange-50/60 border border-orange-200/80 rounded-2xl space-y-3" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ import_react17.default.createElement("span", { className: "font-bold text-slate-800" }, "SkillUp Learning Progress"), /* @__PURE__ */ import_react17.default.createElement("span", { className: "text-orange-600 font-bold" }, learningActivity.assignedCount, " Courses Assigned")), /* @__PURE__ */ import_react17.default.createElement("div", { className: "space-y-2" }, learningActivity.assignments.map((a) => /* @__PURE__ */ import_react17.default.createElement("div", { key: a.id, className: "p-2.5 bg-white rounded-xl border border-orange-100 flex items-center justify-between" }, /* @__PURE__ */ import_react17.default.createElement("div", null, /* @__PURE__ */ import_react17.default.createElement("div", { className: "font-semibold text-slate-800 text-xs" }, a.courseTitle), /* @__PURE__ */ import_react17.default.createElement("div", { className: "text-[10px] text-slate-400 uppercase" }, a.status)), /* @__PURE__ */ import_react17.default.createElement("span", { className: "font-bold text-slate-700" }, a.progress, "%"))))) : /* @__PURE__ */ import_react17.default.createElement("div", { className: "p-5 bg-slate-50 border border-slate-200/70 rounded-2xl text-center space-y-1.5" }, /* @__PURE__ */ import_react17.default.createElement("svg", { className: "w-6 h-6 text-slate-400 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react17.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" })), /* @__PURE__ */ import_react17.default.createElement("div", { className: "font-bold text-slate-700 text-xs" }, "No learning activity yet"), /* @__PURE__ */ import_react17.default.createElement("p", { className: "text-[11px] text-slate-500 max-w-sm mx-auto" }, "Course assignments and module completions will appear here once curricula are assigned to this employee.")), /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center justify-between pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react17.default.createElement("div", { className: "flex items-center gap-2" }, canManageEmployees && /* @__PURE__ */ import_react17.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            const emp = selectedEmployee;
+            setSelectedEmployee(null);
+            setEditingEmployee(emp);
+          },
+          className: "px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold rounded-xl text-xs transition"
+        },
+        "Edit Details"
+      ), canManageAccess && (selectedEmployee.skillup_access === "ENABLED" ? /* @__PURE__ */ import_react17.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            const emp = selectedEmployee;
+            setSelectedEmployee(null);
+            setTogglingState({ employee: emp, targetAccess: "DISABLED" });
+          },
+          className: "px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition"
+        },
+        "Disable Access"
+      ) : /* @__PURE__ */ import_react17.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            const emp = selectedEmployee;
+            setSelectedEmployee(null);
+            setTogglingState({ employee: emp, targetAccess: "ENABLED" });
+          },
+          className: "px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl text-xs transition"
+        },
+        "Enable Access"
+      ))), /* @__PURE__ */ import_react17.default.createElement(
         "button",
         {
           type: "button",
@@ -34462,11 +36436,2009 @@ ${suffix}`;
         },
         "Close Profile"
       )))
+    ), /* @__PURE__ */ import_react17.default.createElement(
+      AddEmployeeModal,
+      {
+        isOpen: isAddModalOpen,
+        onClose: () => setIsAddModalOpen(false),
+        onSuccess: loadEmployees,
+        roles,
+        locations
+      }
+    ), /* @__PURE__ */ import_react17.default.createElement(
+      EditEmployeeModal,
+      {
+        isOpen: Boolean(editingEmployee),
+        onClose: () => setEditingEmployee(null),
+        onSuccess: loadEmployees,
+        employee: editingEmployee,
+        roles,
+        locations
+      }
+    ), togglingState && /* @__PURE__ */ import_react17.default.createElement(
+      AccessToggleModal,
+      {
+        isOpen: Boolean(togglingState),
+        onClose: () => setTogglingState(null),
+        onSuccess: loadEmployees,
+        employee: togglingState.employee,
+        targetAccess: togglingState.targetAccess
+      }
+    ), /* @__PURE__ */ import_react17.default.createElement(
+      BulkImportModal,
+      {
+        isOpen: isBulkModalOpen,
+        onClose: () => setIsBulkModalOpen(false),
+        onSuccess: loadEmployees,
+        roles,
+        locations
+      }
+    ));
+  };
+
+  // src/pages/CoursesPage.tsx
+  var import_react25 = __toESM(require_react());
+
+  // src/components/course/CreateCourseModal.tsx
+  var import_react18 = __toESM(require_react());
+  var DEFAULT_CATEGORIES = [
+    "Gold Loan Product Knowledge",
+    "Sales & Business Development",
+    "Appraisal & Valuation Standards",
+    "Customer Experience & Etiquette",
+    "Collections & Retention",
+    "Compliance, AML & KYC",
+    "Branch & Vault Operations",
+    "Information Security"
+  ];
+  var CreateCourseModal = ({
+    isOpen,
+    onClose,
+    onSubmit,
+    existingCategories
+  }) => {
+    const [title, setTitle] = (0, import_react18.useState)("");
+    const [code, setCode] = (0, import_react18.useState)("");
+    const [category, setCategory] = (0, import_react18.useState)("Gold Loan Product Knowledge");
+    const [customCategory, setCustomCategory] = (0, import_react18.useState)("");
+    const [isCustomCategory, setIsCustomCategory] = (0, import_react18.useState)(false);
+    const [difficulty, setDifficulty] = (0, import_react18.useState)("Intermediate");
+    const [durationMinutes, setDurationMinutes] = (0, import_react18.useState)(30);
+    const [description, setDescription] = (0, import_react18.useState)("");
+    const [thumbnailUrl, setThumbnailUrl] = (0, import_react18.useState)("");
+    const [isSubmitting, setIsSubmitting] = (0, import_react18.useState)(false);
+    const [error, setError] = (0, import_react18.useState)(null);
+    const categories = Array.from(/* @__PURE__ */ new Set([...DEFAULT_CATEGORIES, ...existingCategories]));
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError(null);
+      const cleanTitle = title.trim();
+      if (!cleanTitle) {
+        setError("Course title is required.");
+        return;
+      }
+      const finalCategory = isCustomCategory ? customCategory.trim() : category;
+      if (!finalCategory) {
+        setError("Please select or enter a valid category.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await onSubmit({
+          title: cleanTitle,
+          code: code.trim() || void 0,
+          category: finalCategory,
+          difficulty,
+          estimated_duration_minutes: durationMinutes > 0 ? durationMinutes : 30,
+          description: description.trim() || void 0,
+          thumbnail_url: thumbnailUrl.trim() || void 0,
+          is_active: false,
+          status: "DRAFT"
+        });
+        setTitle("");
+        setCode("");
+        setDescription("");
+        setThumbnailUrl("");
+        setDurationMinutes(30);
+        onClose();
+      } catch (err) {
+        setError(err?.message || "Failed to create course.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react18.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: "Create New Course",
+        subtitle: "Define curriculum master details. Modules, lessons, and quizzes can be added next.",
+        maxWidth: "lg"
+      },
+      /* @__PURE__ */ import_react18.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, error && /* @__PURE__ */ import_react18.default.createElement("div", { className: "p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2" }, /* @__PURE__ */ import_react18.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-rose-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react18.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react18.default.createElement("span", { className: "font-semibold" }, error)), /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Course Title ", /* @__PURE__ */ import_react18.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react18.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: title,
+          onChange: (e) => setTitle(e.target.value),
+          placeholder: "e.g., Gold Loan Purity & Valuation Mastery",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react18.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Course Code / Identifier (Optional)"), /* @__PURE__ */ import_react18.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: code,
+          onChange: (e) => setCode(e.target.value.toUpperCase()),
+          placeholder: "e.g., GL-VAL-101",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-mono placeholder:text-slate-400 outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Target Difficulty Level"), /* @__PURE__ */ import_react18.default.createElement(
+        "select",
+        {
+          value: difficulty,
+          onChange: (e) => setDifficulty(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition bg-white"
+        },
+        /* @__PURE__ */ import_react18.default.createElement("option", { value: "Beginner" }, "Beginner (Foundational)"),
+        /* @__PURE__ */ import_react18.default.createElement("option", { value: "Intermediate" }, "Intermediate (Practitioner)"),
+        /* @__PURE__ */ import_react18.default.createElement("option", { value: "Advanced" }, "Advanced (Specialist / Leadership)")
+      ))), /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ import_react18.default.createElement("label", { className: "font-bold text-slate-700 uppercase tracking-wider text-[10px]" }, "Curriculum Category ", /* @__PURE__ */ import_react18.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react18.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setIsCustomCategory(!isCustomCategory),
+          className: "text-[11px] text-orange-600 hover:text-orange-700 font-semibold"
+        },
+        isCustomCategory ? "\u2190 Choose from list" : "+ Enter new category"
+      )), isCustomCategory ? /* @__PURE__ */ import_react18.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: customCategory,
+          onChange: (e) => setCustomCategory(e.target.value),
+          placeholder: "e.g., Regional Compliance & Audit",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      ) : /* @__PURE__ */ import_react18.default.createElement(
+        "select",
+        {
+          value: category,
+          onChange: (e) => setCategory(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition bg-white"
+        },
+        categories.map((cat) => /* @__PURE__ */ import_react18.default.createElement("option", { key: cat, value: cat }, cat))
+      )), /* @__PURE__ */ import_react18.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Estimated Duration (Minutes)"), /* @__PURE__ */ import_react18.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 5,
+          max: 600,
+          value: durationMinutes,
+          onChange: (e) => setDurationMinutes(parseInt(e.target.value) || 0),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Thumbnail Image URL (Optional)"), /* @__PURE__ */ import_react18.default.createElement(
+        "input",
+        {
+          type: "url",
+          value: thumbnailUrl,
+          onChange: (e) => setThumbnailUrl(e.target.value),
+          placeholder: "https://...",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      ))), /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Curriculum Description & Learning Objectives"), /* @__PURE__ */ import_react18.default.createElement(
+        "textarea",
+        {
+          rows: 3,
+          value: description,
+          onChange: (e) => setDescription(e.target.value),
+          placeholder: "Outline what employees will learn, skills acquired, and prerequisite knowledge...",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition resize-none"
+        }
+      )), /* @__PURE__ */ import_react18.default.createElement("div", { className: "p-3 bg-amber-50/60 border border-amber-200/70 rounded-xl text-amber-800 text-[11px] flex items-start gap-2" }, /* @__PURE__ */ import_react18.default.createElement("svg", { className: "w-4 h-4 text-amber-600 shrink-0 mt-0.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react18.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react18.default.createElement("div", null, "New courses are created in ", /* @__PURE__ */ import_react18.default.createElement("strong", null, "DRAFT"), " status. You can construct modules, lessons, and assessment quizzes in the Curriculum Studio prior to publishing.")), /* @__PURE__ */ import_react18.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react18.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react18.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-md shadow-orange-600/20 transition flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react18.default.createElement(import_react18.default.Fragment, null, /* @__PURE__ */ import_react18.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react18.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react18.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react18.default.createElement("span", null, "Creating Course...")) : /* @__PURE__ */ import_react18.default.createElement("span", null, "Create Course")
+      )))
+    );
+  };
+
+  // src/components/course/EditCourseModal.tsx
+  var import_react19 = __toESM(require_react());
+  var EditCourseModal = ({
+    isOpen,
+    onClose,
+    course,
+    onSubmit,
+    existingCategories
+  }) => {
+    const [title, setTitle] = (0, import_react19.useState)("");
+    const [code, setCode] = (0, import_react19.useState)("");
+    const [category, setCategory] = (0, import_react19.useState)("");
+    const [customCategory, setCustomCategory] = (0, import_react19.useState)("");
+    const [isCustomCategory, setIsCustomCategory] = (0, import_react19.useState)(false);
+    const [difficulty, setDifficulty] = (0, import_react19.useState)("Intermediate");
+    const [durationMinutes, setDurationMinutes] = (0, import_react19.useState)(30);
+    const [description, setDescription] = (0, import_react19.useState)("");
+    const [thumbnailUrl, setThumbnailUrl] = (0, import_react19.useState)("");
+    const [isSubmitting, setIsSubmitting] = (0, import_react19.useState)(false);
+    const [error, setError] = (0, import_react19.useState)(null);
+    (0, import_react19.useEffect)(() => {
+      if (course) {
+        setTitle(course.title || "");
+        setCode(course.code || "");
+        setCategory(course.category || "General");
+        setDifficulty(course.difficulty || "Intermediate");
+        setDurationMinutes(course.estimated_duration_minutes || 30);
+        setDescription(course.description || "");
+        setThumbnailUrl(course.thumbnail_url || "");
+        setIsCustomCategory(false);
+        setError(null);
+      }
+    }, [course]);
+    if (!course) return null;
+    const categories = Array.from(/* @__PURE__ */ new Set(["Gold Loan Product Knowledge", "Sales & Business Development", "Appraisal & Valuation Standards", "Customer Experience & Etiquette", "Collections & Retention", "Compliance, AML & KYC", ...existingCategories]));
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError(null);
+      const cleanTitle = title.trim();
+      if (!cleanTitle) {
+        setError("Course title cannot be empty.");
+        return;
+      }
+      const finalCategory = isCustomCategory ? customCategory.trim() : category;
+      if (!finalCategory) {
+        setError("Please specify a valid category.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await onSubmit({
+          title: cleanTitle,
+          code: code.trim() || void 0,
+          category: finalCategory,
+          difficulty,
+          estimated_duration_minutes: durationMinutes > 0 ? durationMinutes : 30,
+          description: description.trim(),
+          thumbnail_url: thumbnailUrl.trim() || void 0
+        });
+        onClose();
+      } catch (err) {
+        setError(err?.message || "Failed to update course properties.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react19.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: "Edit Course Properties",
+        subtitle: "Modify course master metadata while preserving all modules, lessons, and quizzes.",
+        maxWidth: "lg"
+      },
+      /* @__PURE__ */ import_react19.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, error && /* @__PURE__ */ import_react19.default.createElement("div", { className: "p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2" }, /* @__PURE__ */ import_react19.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-rose-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react19.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react19.default.createElement("span", { className: "font-semibold" }, error)), /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Course Title ", /* @__PURE__ */ import_react19.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react19.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: title,
+          onChange: (e) => setTitle(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react19.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Course Code (Optional)"), /* @__PURE__ */ import_react19.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: code,
+          onChange: (e) => setCode(e.target.value.toUpperCase()),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-mono outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Difficulty Level"), /* @__PURE__ */ import_react19.default.createElement(
+        "select",
+        {
+          value: difficulty,
+          onChange: (e) => setDifficulty(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition bg-white"
+        },
+        /* @__PURE__ */ import_react19.default.createElement("option", { value: "Beginner" }, "Beginner"),
+        /* @__PURE__ */ import_react19.default.createElement("option", { value: "Intermediate" }, "Intermediate"),
+        /* @__PURE__ */ import_react19.default.createElement("option", { value: "Advanced" }, "Advanced")
+      ))), /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ import_react19.default.createElement("label", { className: "font-bold text-slate-700 uppercase tracking-wider text-[10px]" }, "Category ", /* @__PURE__ */ import_react19.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react19.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setIsCustomCategory(!isCustomCategory),
+          className: "text-[11px] text-orange-600 hover:text-orange-700 font-semibold"
+        },
+        isCustomCategory ? "\u2190 Select existing" : "+ Custom category"
+      )), isCustomCategory ? /* @__PURE__ */ import_react19.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: customCategory,
+          onChange: (e) => setCustomCategory(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      ) : /* @__PURE__ */ import_react19.default.createElement(
+        "select",
+        {
+          value: category,
+          onChange: (e) => setCategory(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition bg-white"
+        },
+        categories.map((cat) => /* @__PURE__ */ import_react19.default.createElement("option", { key: cat, value: cat }, cat))
+      )), /* @__PURE__ */ import_react19.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Estimated Duration (Minutes)"), /* @__PURE__ */ import_react19.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 5,
+          max: 600,
+          value: durationMinutes,
+          onChange: (e) => setDurationMinutes(parseInt(e.target.value) || 0),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Thumbnail URL (Optional)"), /* @__PURE__ */ import_react19.default.createElement(
+        "input",
+        {
+          type: "url",
+          value: thumbnailUrl,
+          onChange: (e) => setThumbnailUrl(e.target.value),
+          placeholder: "https://...",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      ))), /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Description"), /* @__PURE__ */ import_react19.default.createElement(
+        "textarea",
+        {
+          rows: 3,
+          value: description,
+          onChange: (e) => setDescription(e.target.value),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition resize-none"
+        }
+      )), /* @__PURE__ */ import_react19.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react19.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react19.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-md shadow-orange-600/20 transition flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react19.default.createElement(import_react19.default.Fragment, null, /* @__PURE__ */ import_react19.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react19.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react19.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react19.default.createElement("span", null, "Saving Changes...")) : /* @__PURE__ */ import_react19.default.createElement("span", null, "Save Changes")
+      )))
+    );
+  };
+
+  // src/components/course/CoursePreviewModal.tsx
+  var import_react20 = __toESM(require_react());
+  var CoursePreviewModal = ({
+    isOpen,
+    onClose,
+    course
+  }) => {
+    const [selectedModuleId, setSelectedModuleId] = (0, import_react20.useState)(null);
+    const [selectedItemType, setSelectedItemType] = (0, import_react20.useState)("OVERVIEW");
+    const [selectedLesson, setSelectedLesson] = (0, import_react20.useState)(null);
+    const [selectedQuiz, setSelectedQuiz] = (0, import_react20.useState)(null);
+    const [userAnswers, setUserAnswers] = (0, import_react20.useState)({});
+    const [isQuizSubmitted, setIsQuizSubmitted] = (0, import_react20.useState)(false);
+    if (!course) return null;
+    const modules = course.modules || [];
+    const handleSelectLesson = (mod, lesson) => {
+      setSelectedModuleId(mod.id);
+      setSelectedLesson(lesson);
+      setSelectedQuiz(null);
+      setSelectedItemType("LESSON");
+    };
+    const handleSelectQuiz = (mod, quiz) => {
+      setSelectedModuleId(mod.id);
+      setSelectedQuiz(quiz);
+      setSelectedLesson(null);
+      setSelectedItemType("QUIZ");
+      setUserAnswers({});
+      setIsQuizSubmitted(false);
+    };
+    const handleSelectOverview = () => {
+      setSelectedItemType("OVERVIEW");
+      setSelectedLesson(null);
+      setSelectedQuiz(null);
+    };
+    const handleQuizAnswer = (qIndex, optIndex) => {
+      if (isQuizSubmitted) return;
+      setUserAnswers((prev) => ({
+        ...prev,
+        [qIndex]: optIndex
+      }));
+    };
+    const calculateQuizScore = () => {
+      if (!selectedQuiz?.questions) return 0;
+      let correctCount = 0;
+      selectedQuiz.questions.forEach((q, qIdx) => {
+        const chosenOptIdx = userAnswers[qIdx];
+        if (chosenOptIdx !== void 0 && q.options?.[chosenOptIdx]?.is_correct) {
+          correctCount++;
+        }
+      });
+      return Math.round(correctCount / selectedQuiz.questions.length * 100);
+    };
+    return /* @__PURE__ */ import_react20.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: "Learner Preview Mode",
+        subtitle: `Previewing: ${course.title}`,
+        maxWidth: "3xl"
+      },
+      /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs text-amber-900" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" }), /* @__PURE__ */ import_react20.default.createElement("span", { className: "font-bold" }, "ADMIN PREVIEW MODE:"), /* @__PURE__ */ import_react20.default.createElement("span", null, "Interactive simulator. No progress, completions, or quiz attempts will be saved.")), /* @__PURE__ */ import_react20.default.createElement("span", { className: "px-2 py-0.5 rounded-full bg-amber-200/60 font-mono text-[10px] font-bold" }, "SANDBOX")), /* @__PURE__ */ import_react20.default.createElement("div", { className: "grid grid-cols-1 md:grid-cols-12 gap-4 border border-slate-200 rounded-2xl overflow-hidden min-h-[500px] bg-slate-50" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "md:col-span-4 bg-white border-r border-slate-200 p-3 overflow-y-auto max-h-[560px]" }, /* @__PURE__ */ import_react20.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: handleSelectOverview,
+          className: `w-full text-left p-2.5 rounded-xl font-bold text-xs mb-2 transition flex items-center gap-2 ${selectedItemType === "OVERVIEW" ? "bg-orange-50 text-orange-700 border border-orange-200" : "text-slate-700 hover:bg-slate-50 border border-transparent"}`
+        },
+        /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-4 h-4 text-orange-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M4 6h16M4 12h16M4 18h7" })),
+        /* @__PURE__ */ import_react20.default.createElement("span", null, "Course Overview")
+      ), /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-3" }, modules.length === 0 ? /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-4 text-center text-slate-400 text-xs italic" }, "No modules created in this course yet.") : modules.map((mod, modIdx) => /* @__PURE__ */ import_react20.default.createElement("div", { key: mod.id, className: "border border-slate-100 rounded-xl overflow-hidden bg-slate-50/50" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-2 bg-slate-100/80 font-bold text-[11px] text-slate-700 flex items-center justify-between" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "truncate" }, "M", modIdx + 1, ": ", mod.title), /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-[10px] text-slate-400 font-mono shrink-0" }, (mod.lessons?.length || 0) + (mod.quizzes?.length || 0), " items")), /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-1 space-y-1" }, (mod.lessons || []).map((l, lIdx) => {
+        const isSelected = selectedItemType === "LESSON" && selectedLesson?.id === l.id;
+        return /* @__PURE__ */ import_react20.default.createElement(
+          "button",
+          {
+            key: l.id,
+            type: "button",
+            onClick: () => handleSelectLesson(mod, l),
+            className: `w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-2 ${isSelected ? "bg-orange-600 text-white font-bold" : "text-slate-600 hover:bg-white hover:text-slate-900"}`
+          },
+          l.content_type === "VIDEO" ? /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-3.5 h-3.5 shrink-0 opacity-80", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" }), /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })) : l.content_type === "PDF" ? /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-3.5 h-3.5 shrink-0 opacity-80", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })) : /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-3.5 h-3.5 shrink-0 opacity-80", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" })),
+          /* @__PURE__ */ import_react20.default.createElement("span", { className: "truncate flex-1" }, lIdx + 1, ". ", l.title),
+          /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-[10px] opacity-70 shrink-0" }, l.duration_minutes || 5, "m")
+        );
+      }), (mod.quizzes || []).map((q, qIdx) => {
+        const isSelected = selectedItemType === "QUIZ" && selectedQuiz?.id === q.id;
+        return /* @__PURE__ */ import_react20.default.createElement(
+          "button",
+          {
+            key: q.id,
+            type: "button",
+            onClick: () => handleSelectQuiz(mod, q),
+            className: `w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-2 ${isSelected ? "bg-amber-600 text-white font-bold" : "text-amber-700 bg-amber-50/50 hover:bg-amber-100/70"}`
+          },
+          /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-3.5 h-3.5 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" })),
+          /* @__PURE__ */ import_react20.default.createElement("span", { className: "truncate flex-1" }, "Assessment ", qIdx + 1, ": ", q.title),
+          /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-[10px] px-1.5 py-0.2 rounded bg-amber-200/60 font-bold shrink-0" }, "Quiz")
+        );
+      })))))), /* @__PURE__ */ import_react20.default.createElement("div", { className: "md:col-span-8 p-5 overflow-y-auto max-h-[560px] bg-white" }, selectedItemType === "OVERVIEW" && /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-4" }, course.thumbnail_url && /* @__PURE__ */ import_react20.default.createElement("div", { className: "h-44 w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-100" }, /* @__PURE__ */ import_react20.default.createElement("img", { src: course.thumbnail_url, alt: course.title, className: "w-full h-full object-cover" })), /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-center gap-2 mb-1.5" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "px-2.5 py-1 rounded-md bg-orange-100 text-orange-800 font-bold text-[10px]" }, course.category), /* @__PURE__ */ import_react20.default.createElement("span", { className: "px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-bold text-[10px]" }, course.difficulty || "Intermediate"), /* @__PURE__ */ import_react20.default.createElement("span", { className: "px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[10px]" }, course.is_active ? "PUBLISHED" : "DRAFT")), /* @__PURE__ */ import_react20.default.createElement("h2", { className: "text-xl font-bold text-slate-900" }, course.title), course.code && /* @__PURE__ */ import_react20.default.createElement("span", { className: "font-mono text-slate-400 text-xs" }, "Code: ", course.code)), /* @__PURE__ */ import_react20.default.createElement("div", { className: "grid grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs" }, /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("div", { className: "font-bold text-slate-900" }, course.modules?.length || 0), /* @__PURE__ */ import_react20.default.createElement("div", { className: "text-[10px] text-slate-400 uppercase" }, "Modules")), /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("div", { className: "font-bold text-slate-900" }, course.lessons_count || 0), /* @__PURE__ */ import_react20.default.createElement("div", { className: "text-[10px] text-slate-400 uppercase" }, "Lessons")), /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("div", { className: "font-bold text-slate-900" }, course.estimated_duration_minutes || 30, " Min"), /* @__PURE__ */ import_react20.default.createElement("div", { className: "text-[10px] text-slate-400 uppercase" }, "Est. Duration"))), /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("h3", { className: "font-bold text-slate-800 text-xs uppercase tracking-wider mb-1" }, "Course Description & Learning Outcomes"), /* @__PURE__ */ import_react20.default.createElement("p", { className: "text-slate-600 text-xs leading-relaxed whitespace-pre-line" }, course.description || "No detailed syllabus description provided yet."))), selectedItemType === "LESSON" && selectedLesson && /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "border-b border-slate-100 pb-3" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-center gap-2 mb-1" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold text-[10px]" }, selectedLesson.content_type, " LESSON"), /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-slate-400 text-xs font-medium" }, "\u23F1 ", selectedLesson.duration_minutes || 5, " minutes")), /* @__PURE__ */ import_react20.default.createElement("h2", { className: "text-lg font-bold text-slate-900" }, selectedLesson.title)), selectedLesson.content_type === "VIDEO" && /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "aspect-video w-full rounded-2xl bg-slate-900 flex flex-col items-center justify-center text-white p-6 shadow-inner relative overflow-hidden" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "text-xs font-mono truncate text-slate-300" }, "Resource: ", selectedLesson.video_url || "sample_video.mp4")), /* @__PURE__ */ import_react20.default.createElement("div", { className: "w-16 h-16 rounded-full bg-orange-600/90 text-white flex items-center justify-center shadow-lg transform transition hover:scale-110 cursor-pointer" }, /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-8 h-8 ml-1", fill: "currentColor", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react20.default.createElement("path", { d: "M8 5v14l11-7z" })))), /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-center justify-between" }, /* @__PURE__ */ import_react20.default.createElement("span", null, "Streaming URL: ", /* @__PURE__ */ import_react20.default.createElement("code", { className: "text-orange-600" }, selectedLesson.video_url || "Internal Asset")), /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-[10px] text-slate-400" }, "Resolution: 1080p HD"))), selectedLesson.content_type === "PDF" && /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-8 border-2 border-dashed border-red-200 bg-red-50/40 rounded-2xl flex flex-col items-center justify-center text-center space-y-3" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "w-14 h-14 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shadow-sm" }, /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" }))), /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("h4", { className: "font-bold text-slate-800 text-sm" }, selectedLesson.title), /* @__PURE__ */ import_react20.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5 font-mono truncate max-w-sm" }, selectedLesson.pdf_url || "Policy_Document_v2026.pdf")), /* @__PURE__ */ import_react20.default.createElement(
+        "a",
+        {
+          href: selectedLesson.pdf_url || "#",
+          target: "_blank",
+          rel: "noreferrer",
+          className: "px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-md shadow-red-600/20 transition flex items-center gap-2"
+        },
+        /* @__PURE__ */ import_react20.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react20.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" })),
+        /* @__PURE__ */ import_react20.default.createElement("span", null, "Open Document Reader")
+      ))), (selectedLesson.content_type === "TEXT" || selectedLesson.content_type === "ARTICLE") && /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "prose prose-sm max-w-none p-5 bg-slate-50/70 border border-slate-200 rounded-2xl text-slate-800 text-xs leading-relaxed whitespace-pre-line font-sans" }, selectedLesson.content_text || "No article content provided."))), selectedItemType === "QUIZ" && selectedQuiz && /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "border-b border-slate-100 pb-3 flex items-center justify-between" }, /* @__PURE__ */ import_react20.default.createElement("div", null, /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-center gap-2 mb-1" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]" }, "ASSESSMENT QUIZ"), /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-slate-400 text-xs font-medium" }, "Passing: ", selectedQuiz.passing_score, "%")), /* @__PURE__ */ import_react20.default.createElement("h2", { className: "text-lg font-bold text-slate-900" }, selectedQuiz.title)), isQuizSubmitted && /* @__PURE__ */ import_react20.default.createElement("div", { className: `px-4 py-2 rounded-xl text-center font-bold text-xs ${calculateQuizScore() >= selectedQuiz.passing_score ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-rose-100 text-rose-800 border border-rose-300"}` }, /* @__PURE__ */ import_react20.default.createElement("div", null, "Score: ", calculateQuizScore(), "%"), /* @__PURE__ */ import_react20.default.createElement("div", { className: "text-[10px]" }, calculateQuizScore() >= selectedQuiz.passing_score ? "PASSED \u2713" : "FAILED \u2717"))), /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-5" }, (selectedQuiz.questions || []).map((q, qIdx) => {
+        const chosenOptIdx = userAnswers[qIdx];
+        return /* @__PURE__ */ import_react20.default.createElement("div", { key: q.id || qIdx, className: "p-4 border border-slate-200 rounded-2xl bg-slate-50/60 space-y-3" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-start justify-between gap-3" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "font-bold text-slate-900 text-xs" }, qIdx + 1, ". ", q.question_text), /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-600 font-bold shrink-0" }, q.points || 1, " Pt")), /* @__PURE__ */ import_react20.default.createElement("div", { className: "space-y-1.5" }, (q.options || []).map((opt, optIdx) => {
+          const isChosen = chosenOptIdx === optIdx;
+          let style = "border-slate-200 bg-white text-slate-700 hover:border-slate-300";
+          if (isQuizSubmitted) {
+            if (opt.is_correct) {
+              style = "border-emerald-400 bg-emerald-50 text-emerald-900 font-bold";
+            } else if (isChosen && !opt.is_correct) {
+              style = "border-rose-400 bg-rose-50 text-rose-900 line-through";
+            }
+          } else if (isChosen) {
+            style = "border-orange-500 bg-orange-50/70 text-orange-900 font-bold ring-2 ring-orange-500/20";
+          }
+          return /* @__PURE__ */ import_react20.default.createElement(
+            "button",
+            {
+              key: opt.id || optIdx,
+              type: "button",
+              onClick: () => handleQuizAnswer(qIdx, optIdx),
+              className: `w-full text-left p-2.5 rounded-xl border text-xs transition flex items-center gap-2.5 ${style}`
+            },
+            /* @__PURE__ */ import_react20.default.createElement("span", { className: "font-mono font-bold text-[11px] opacity-60 w-4" }, String.fromCharCode(65 + optIdx), "."),
+            /* @__PURE__ */ import_react20.default.createElement("span", { className: "flex-1" }, opt.option_text),
+            isQuizSubmitted && opt.is_correct && /* @__PURE__ */ import_react20.default.createElement("span", { className: "text-emerald-700 font-bold text-[10px]" }, "\u2713 Correct")
+          );
+        })), isQuizSubmitted && q.explanation && /* @__PURE__ */ import_react20.default.createElement("div", { className: "p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl text-blue-900 text-[11px] flex items-start gap-2" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "font-bold" }, "Rationale:"), /* @__PURE__ */ import_react20.default.createElement("span", null, q.explanation)));
+      })), /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-3 border-t border-slate-100" }, isQuizSubmitted ? /* @__PURE__ */ import_react20.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => {
+            setUserAnswers({});
+            setIsQuizSubmitted(false);
+          },
+          className: "px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+        },
+        "Retry Assessment"
+      ) : /* @__PURE__ */ import_react20.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setIsQuizSubmitted(true),
+          className: "px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition"
+        },
+        "Submit Test Answers"
+      ))))), /* @__PURE__ */ import_react20.default.createElement("div", { className: "flex items-center justify-between pt-2" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "text-xs text-slate-400" }, "Navigation controls active. Previewing course as standard learner."), /* @__PURE__ */ import_react20.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          className: "px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition"
+        },
+        "Close Preview"
+      )))
+    );
+  };
+
+  // src/components/course/CourseStudio.tsx
+  var import_react24 = __toESM(require_react());
+
+  // src/components/course/ModuleModal.tsx
+  var import_react21 = __toESM(require_react());
+  var ModuleModal = ({
+    isOpen,
+    onClose,
+    module,
+    courseTitle,
+    nextOrder,
+    onSubmit
+  }) => {
+    const [title, setTitle] = (0, import_react21.useState)("");
+    const [description, setDescription] = (0, import_react21.useState)("");
+    const [order, setOrder] = (0, import_react21.useState)(nextOrder);
+    const [isSubmitting, setIsSubmitting] = (0, import_react21.useState)(false);
+    const [error, setError] = (0, import_react21.useState)(null);
+    (0, import_react21.useEffect)(() => {
+      if (module) {
+        setTitle(module.title || "");
+        setDescription(module.description || "");
+        setOrder(module.sequence_order || 1);
+      } else {
+        setTitle("");
+        setDescription("");
+        setOrder(nextOrder);
+      }
+      setError(null);
+    }, [module, nextOrder, isOpen]);
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError(null);
+      const cleanTitle = title.trim();
+      if (!cleanTitle) {
+        setError("Module title is required.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await onSubmit({
+          title: cleanTitle,
+          description: description.trim() || void 0,
+          sequence_order: order
+        });
+        onClose();
+      } catch (err) {
+        setError(err?.message || "Failed to save module.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react21.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: module ? "Edit Module" : "Add Curriculum Module",
+        subtitle: `Course: ${courseTitle}`,
+        maxWidth: "md"
+      },
+      /* @__PURE__ */ import_react21.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, error && /* @__PURE__ */ import_react21.default.createElement("div", { className: "p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2" }, /* @__PURE__ */ import_react21.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-rose-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react21.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react21.default.createElement("span", { className: "font-semibold" }, error)), /* @__PURE__ */ import_react21.default.createElement("div", null, /* @__PURE__ */ import_react21.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Module Title ", /* @__PURE__ */ import_react21.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react21.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: title,
+          onChange: (e) => setTitle(e.target.value),
+          placeholder: "e.g., Module 1: Product Basics & Loan Mechanics",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react21.default.createElement("div", null, /* @__PURE__ */ import_react21.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Sequence Order"), /* @__PURE__ */ import_react21.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 1,
+          value: order,
+          onChange: (e) => setOrder(parseInt(e.target.value) || 1),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react21.default.createElement("div", null, /* @__PURE__ */ import_react21.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Module Summary / Objectives (Optional)"), /* @__PURE__ */ import_react21.default.createElement(
+        "textarea",
+        {
+          rows: 3,
+          value: description,
+          onChange: (e) => setDescription(e.target.value),
+          placeholder: "Key concepts covered in this module...",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition resize-none"
+        }
+      )), /* @__PURE__ */ import_react21.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react21.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react21.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-md shadow-orange-600/20 transition flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react21.default.createElement(import_react21.default.Fragment, null, /* @__PURE__ */ import_react21.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react21.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react21.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react21.default.createElement("span", null, "Saving Module...")) : /* @__PURE__ */ import_react21.default.createElement("span", null, module ? "Save Changes" : "Create Module")
+      )))
+    );
+  };
+
+  // src/components/course/LessonModal.tsx
+  var import_react22 = __toESM(require_react());
+  var LessonModal = ({
+    isOpen,
+    onClose,
+    lesson,
+    moduleTitle,
+    nextOrder,
+    onSubmit
+  }) => {
+    const [title, setTitle] = (0, import_react22.useState)("");
+    const [contentType, setContentType] = (0, import_react22.useState)("VIDEO");
+    const [contentText, setContentText] = (0, import_react22.useState)("");
+    const [videoUrl, setVideoUrl] = (0, import_react22.useState)("");
+    const [pdfUrl, setPdfUrl] = (0, import_react22.useState)("");
+    const [durationMinutes, setDurationMinutes] = (0, import_react22.useState)(5);
+    const [order, setOrder] = (0, import_react22.useState)(nextOrder);
+    const [isSubmitting, setIsSubmitting] = (0, import_react22.useState)(false);
+    const [error, setError] = (0, import_react22.useState)(null);
+    (0, import_react22.useEffect)(() => {
+      if (lesson) {
+        setTitle(lesson.title || "");
+        setContentType(lesson.content_type || "VIDEO");
+        setContentText(lesson.content_text || "");
+        setVideoUrl(lesson.video_url || "");
+        setPdfUrl(lesson.pdf_url || "");
+        setDurationMinutes(lesson.duration_minutes || 5);
+        setOrder(lesson.sequence_order || 1);
+      } else {
+        setTitle("");
+        setContentType("VIDEO");
+        setContentText("");
+        setVideoUrl("");
+        setPdfUrl("");
+        setDurationMinutes(5);
+        setOrder(nextOrder);
+      }
+      setError(null);
+    }, [lesson, nextOrder, isOpen]);
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError(null);
+      const cleanTitle = title.trim();
+      if (!cleanTitle) {
+        setError("Lesson title is required.");
+        return;
+      }
+      if (contentType === "VIDEO" && !videoUrl.trim()) {
+        setError("Please provide a valid video URL or asset path.");
+        return;
+      }
+      if (contentType === "PDF" && !pdfUrl.trim()) {
+        setError("Please provide a PDF document link or resource URL.");
+        return;
+      }
+      if ((contentType === "TEXT" || contentType === "ARTICLE") && !contentText.trim()) {
+        setError("Please enter article content for text lessons.");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        await onSubmit({
+          title: cleanTitle,
+          content_type: contentType,
+          content_text: contentType === "TEXT" || contentType === "ARTICLE" ? contentText.trim() : void 0,
+          video_url: contentType === "VIDEO" ? videoUrl.trim() : void 0,
+          pdf_url: contentType === "PDF" ? pdfUrl.trim() : void 0,
+          duration_minutes: durationMinutes > 0 ? durationMinutes : 5,
+          sequence_order: order
+        });
+        onClose();
+      } catch (err) {
+        setError(err?.message || "Failed to save lesson.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    return /* @__PURE__ */ import_react22.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: lesson ? "Edit Lesson" : "Add Lesson to Module",
+        subtitle: `Module: ${moduleTitle}`,
+        maxWidth: "lg"
+      },
+      /* @__PURE__ */ import_react22.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, error && /* @__PURE__ */ import_react22.default.createElement("div", { className: "p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2" }, /* @__PURE__ */ import_react22.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-rose-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react22.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react22.default.createElement("span", { className: "font-semibold" }, error)), /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Lesson Title ", /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react22.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: title,
+          onChange: (e) => setTitle(e.target.value),
+          placeholder: "e.g., Understanding Nitric Acid Touchstone Testing",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1.5 uppercase tracking-wider text-[10px]" }, "Content Format / Delivery Type ", /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react22.default.createElement("div", { className: "grid grid-cols-3 gap-2.5" }, /* @__PURE__ */ import_react22.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setContentType("VIDEO"),
+          className: `p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition ${contentType === "VIDEO" ? "border-orange-500 bg-orange-50/70 text-orange-800 ring-2 ring-orange-500/20" : "border-slate-200 hover:border-slate-300 text-slate-600 bg-white"}`
+        },
+        /* @__PURE__ */ import_react22.default.createElement("svg", { className: "w-5 h-5 text-orange-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react22.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" })),
+        /* @__PURE__ */ import_react22.default.createElement("span", { className: "font-bold text-[11px]" }, "Video Lesson"),
+        /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-[10px] text-slate-400" }, "MP4 / YouTube / Embed")
+      ), /* @__PURE__ */ import_react22.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setContentType("PDF"),
+          className: `p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition ${contentType === "PDF" ? "border-orange-500 bg-orange-50/70 text-orange-800 ring-2 ring-orange-500/20" : "border-slate-200 hover:border-slate-300 text-slate-600 bg-white"}`
+        },
+        /* @__PURE__ */ import_react22.default.createElement("svg", { className: "w-5 h-5 text-red-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react22.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" })),
+        /* @__PURE__ */ import_react22.default.createElement("span", { className: "font-bold text-[11px]" }, "PDF Document"),
+        /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-[10px] text-slate-400" }, "Standard SOP / Circular")
+      ), /* @__PURE__ */ import_react22.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setContentType("TEXT"),
+          className: `p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition ${contentType === "TEXT" || contentType === "ARTICLE" ? "border-orange-500 bg-orange-50/70 text-orange-800 ring-2 ring-orange-500/20" : "border-slate-200 hover:border-slate-300 text-slate-600 bg-white"}`
+        },
+        /* @__PURE__ */ import_react22.default.createElement("svg", { className: "w-5 h-5 text-indigo-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react22.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })),
+        /* @__PURE__ */ import_react22.default.createElement("span", { className: "font-bold text-[11px]" }, "Text / Article"),
+        /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-[10px] text-slate-400" }, "In-app Reader & Guide")
+      ))), contentType === "VIDEO" && /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Video URL / Streaming Resource Link ", /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react22.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: videoUrl,
+          onChange: (e) => setVideoUrl(e.target.value),
+          placeholder: "https://commondatastorage.googleapis.com/... or https://www.youtube.com/watch?v=...",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      )), contentType === "PDF" && /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "PDF Document URL / Storage Link ", /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react22.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: pdfUrl,
+          onChange: (e) => setPdfUrl(e.target.value),
+          placeholder: "https://storage.googleapis.com/.../handbook.pdf",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition"
+        }
+      )), (contentType === "TEXT" || contentType === "ARTICLE") && /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Article / Reading Content ", /* @__PURE__ */ import_react22.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react22.default.createElement(
+        "textarea",
+        {
+          rows: 6,
+          required: true,
+          value: contentText,
+          onChange: (e) => setContentText(e.target.value),
+          placeholder: "Write the full training material, formulas, checklists, and key takeaways...",
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium placeholder:text-slate-400 outline-none transition resize-y font-sans"
+        }
+      )), /* @__PURE__ */ import_react22.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" }, /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Duration (Minutes)"), /* @__PURE__ */ import_react22.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 1,
+          max: 180,
+          value: durationMinutes,
+          onChange: (e) => setDurationMinutes(parseInt(e.target.value) || 1),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      )), /* @__PURE__ */ import_react22.default.createElement("div", null, /* @__PURE__ */ import_react22.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Sequence Order"), /* @__PURE__ */ import_react22.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 1,
+          value: order,
+          onChange: (e) => setOrder(parseInt(e.target.value) || 1),
+          className: "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-medium outline-none transition"
+        }
+      ))), /* @__PURE__ */ import_react22.default.createElement("div", { className: "flex items-center justify-end gap-3 pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react22.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react22.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-md shadow-orange-600/20 transition flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react22.default.createElement(import_react22.default.Fragment, null, /* @__PURE__ */ import_react22.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react22.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react22.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react22.default.createElement("span", null, "Saving Lesson...")) : /* @__PURE__ */ import_react22.default.createElement("span", null, lesson ? "Save Changes" : "Create Lesson")
+      )))
+    );
+  };
+
+  // src/components/course/QuizBuilderModal.tsx
+  var import_react23 = __toESM(require_react());
+  var QuizBuilderModal = ({
+    isOpen,
+    onClose,
+    quiz,
+    courseId,
+    moduleId,
+    parentTitle,
+    onSubmit
+  }) => {
+    const [title, setTitle] = (0, import_react23.useState)("");
+    const [description, setDescription] = (0, import_react23.useState)("");
+    const [passingScore, setPassingScore] = (0, import_react23.useState)(70);
+    const [timeLimit, setTimeLimit] = (0, import_react23.useState)(10);
+    const [questions, setQuestions] = (0, import_react23.useState)([]);
+    const [activeQuestionIndex, setActiveQuestionIndex] = (0, import_react23.useState)(0);
+    const [isSubmitting, setIsSubmitting] = (0, import_react23.useState)(false);
+    const [error, setError] = (0, import_react23.useState)(null);
+    (0, import_react23.useEffect)(() => {
+      if (quiz) {
+        setTitle(quiz.title || "");
+        setDescription(quiz.description || "");
+        setPassingScore(quiz.passing_score ?? 70);
+        setTimeLimit(quiz.time_limit_minutes || "");
+        if (quiz.questions && quiz.questions.length > 0) {
+          setQuestions(
+            quiz.questions.map((q, idx) => ({
+              id: q.id,
+              question_text: q.question_text || "",
+              question_type: q.question_type || "SINGLE_CHOICE",
+              points: q.points || 1,
+              explanation: q.explanation || "",
+              sequence_order: q.sequence_order || idx + 1,
+              options: (q.options || []).map((opt, optIdx) => ({
+                id: opt.id,
+                option_text: opt.option_text || "",
+                is_correct: Boolean(opt.is_correct),
+                sequence_order: opt.sequence_order || optIdx + 1
+              }))
+            }))
+          );
+        } else {
+          setQuestions([createDefaultQuestion(1)]);
+        }
+      } else {
+        setTitle("");
+        setDescription("");
+        setPassingScore(70);
+        setTimeLimit(10);
+        setQuestions([createDefaultQuestion(1)]);
+      }
+      setActiveQuestionIndex(0);
+      setError(null);
+    }, [quiz, isOpen]);
+    function createDefaultQuestion(order) {
+      return {
+        question_text: "",
+        question_type: "SINGLE_CHOICE",
+        points: 1,
+        explanation: "",
+        sequence_order: order,
+        options: [
+          { option_text: "", is_correct: true, sequence_order: 1 },
+          { option_text: "", is_correct: false, sequence_order: 2 },
+          { option_text: "", is_correct: false, sequence_order: 3 },
+          { option_text: "", is_correct: false, sequence_order: 4 }
+        ]
+      };
+    }
+    const handleAddQuestion = () => {
+      const nextOrder = questions.length + 1;
+      setQuestions([...questions, createDefaultQuestion(nextOrder)]);
+      setActiveQuestionIndex(questions.length);
+    };
+    const handleRemoveQuestion = (index) => {
+      if (questions.length <= 1) {
+        setError("A quiz must have at least one question.");
+        return;
+      }
+      const updated = questions.filter((_, idx) => idx !== index).map((q, idx) => ({
+        ...q,
+        sequence_order: idx + 1
+      }));
+      setQuestions(updated);
+      setActiveQuestionIndex(Math.max(0, index - 1));
+    };
+    const handleUpdateCurrentQuestion = (field, value) => {
+      const updated = [...questions];
+      updated[activeQuestionIndex] = {
+        ...updated[activeQuestionIndex],
+        [field]: value
+      };
+      setQuestions(updated);
+    };
+    const handleUpdateOption = (optIdx, text) => {
+      const updated = [...questions];
+      const currentQ2 = updated[activeQuestionIndex];
+      const newOptions = [...currentQ2.options];
+      newOptions[optIdx] = { ...newOptions[optIdx], option_text: text };
+      updated[activeQuestionIndex] = { ...currentQ2, options: newOptions };
+      setQuestions(updated);
+    };
+    const handleSetCorrectOption = (correctIdx) => {
+      const updated = [...questions];
+      const currentQ2 = updated[activeQuestionIndex];
+      const newOptions = currentQ2.options.map((opt, idx) => ({
+        ...opt,
+        is_correct: idx === correctIdx
+      }));
+      updated[activeQuestionIndex] = { ...currentQ2, options: newOptions };
+      setQuestions(updated);
+    };
+    const handleAddOption = () => {
+      const updated = [...questions];
+      const currentQ2 = updated[activeQuestionIndex];
+      if (currentQ2.options.length >= 6) return;
+      const newOptions = [
+        ...currentQ2.options,
+        { option_text: "", is_correct: false, sequence_order: currentQ2.options.length + 1 }
+      ];
+      updated[activeQuestionIndex] = { ...currentQ2, options: newOptions };
+      setQuestions(updated);
+    };
+    const handleRemoveOption = (optIdx) => {
+      const updated = [...questions];
+      const currentQ2 = updated[activeQuestionIndex];
+      if (currentQ2.options.length <= 2) {
+        setError("Questions must have at least 2 options.");
+        return;
+      }
+      const newOptions = currentQ2.options.filter((_, idx) => idx !== optIdx);
+      if (!newOptions.some((o) => o.is_correct)) {
+        newOptions[0].is_correct = true;
+      }
+      updated[activeQuestionIndex] = { ...currentQ2, options: newOptions };
+      setQuestions(updated);
+    };
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      setError(null);
+      const cleanTitle = title.trim();
+      if (!cleanTitle) {
+        setError("Quiz title is required.");
+        return;
+      }
+      if (questions.length === 0) {
+        setError("Please add at least one question.");
+        return;
+      }
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        if (!q.question_text.trim()) {
+          setError(`Question #${i + 1} text cannot be empty.`);
+          setActiveQuestionIndex(i);
+          return;
+        }
+        if (q.options.length < 2) {
+          setError(`Question #${i + 1} must have at least 2 options.`);
+          setActiveQuestionIndex(i);
+          return;
+        }
+        const emptyOpt = q.options.some((o) => !o.option_text.trim());
+        if (emptyOpt) {
+          setError(`Question #${i + 1} contains empty answer choices.`);
+          setActiveQuestionIndex(i);
+          return;
+        }
+        const hasCorrect = q.options.some((o) => o.is_correct);
+        if (!hasCorrect) {
+          setError(`Question #${i + 1} must have a correct answer selected.`);
+          setActiveQuestionIndex(i);
+          return;
+        }
+        const texts = q.options.map((o) => o.option_text.trim().toLowerCase());
+        if (new Set(texts).size < texts.length) {
+          setError(`Question #${i + 1} has duplicate answer options.`);
+          setActiveQuestionIndex(i);
+          return;
+        }
+      }
+      setIsSubmitting(true);
+      try {
+        await onSubmit({
+          id: quiz?.id,
+          course_id: courseId,
+          module_id: moduleId,
+          title: cleanTitle,
+          description: description.trim() || void 0,
+          passing_score: passingScore,
+          time_limit_minutes: typeof timeLimit === "number" ? timeLimit : void 0,
+          questions: questions.map((q, idx) => ({
+            id: q.id,
+            question_text: q.question_text.trim(),
+            question_type: q.question_type,
+            points: q.points || 1,
+            explanation: q.explanation.trim() || void 0,
+            sequence_order: idx + 1,
+            options: q.options.map((opt, optIdx) => ({
+              id: opt.id,
+              option_text: opt.option_text.trim(),
+              is_correct: opt.is_correct,
+              sequence_order: optIdx + 1
+            }))
+          }))
+        });
+        onClose();
+      } catch (err) {
+        setError(err?.message || "Failed to save quiz.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    const currentQ = questions[activeQuestionIndex] || questions[0];
+    return /* @__PURE__ */ import_react23.default.createElement(
+      Modal,
+      {
+        isOpen,
+        onClose,
+        title: quiz ? "Edit Assessment Quiz" : "Create Assessment Quiz",
+        subtitle: `Attached to: ${parentTitle}`,
+        maxWidth: "2xl"
+      },
+      /* @__PURE__ */ import_react23.default.createElement("form", { onSubmit: handleSubmit, className: "space-y-4 text-xs" }, error && /* @__PURE__ */ import_react23.default.createElement("div", { className: "p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center gap-2" }, /* @__PURE__ */ import_react23.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-rose-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react23.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react23.default.createElement("span", { className: "font-semibold" }, error)), /* @__PURE__ */ import_react23.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl" }, /* @__PURE__ */ import_react23.default.createElement("div", { className: "sm:col-span-3" }, /* @__PURE__ */ import_react23.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Quiz Title ", /* @__PURE__ */ import_react23.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react23.default.createElement(
+        "input",
+        {
+          type: "text",
+          required: true,
+          value: title,
+          onChange: (e) => setTitle(e.target.value),
+          placeholder: "e.g., Gold Loan Valuation Competency Assessment",
+          className: "w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-orange-500 bg-white font-medium text-slate-800 outline-none"
+        }
+      )), /* @__PURE__ */ import_react23.default.createElement("div", null, /* @__PURE__ */ import_react23.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Passing Threshold (%)"), /* @__PURE__ */ import_react23.default.createElement("div", { className: "flex items-center gap-1.5" }, /* @__PURE__ */ import_react23.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 10,
+          max: 100,
+          value: passingScore,
+          onChange: (e) => setPassingScore(parseInt(e.target.value) || 70),
+          className: "w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-orange-500 bg-white font-medium text-slate-800 outline-none"
+        }
+      ), /* @__PURE__ */ import_react23.default.createElement("span", { className: "text-slate-500 font-bold" }, "%"))), /* @__PURE__ */ import_react23.default.createElement("div", null, /* @__PURE__ */ import_react23.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Time Limit (Min)"), /* @__PURE__ */ import_react23.default.createElement(
+        "input",
+        {
+          type: "number",
+          min: 1,
+          max: 120,
+          placeholder: "No limit",
+          value: timeLimit,
+          onChange: (e) => setTimeLimit(e.target.value ? parseInt(e.target.value) : ""),
+          className: "w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-orange-500 bg-white font-medium text-slate-800 outline-none"
+        }
+      )), /* @__PURE__ */ import_react23.default.createElement("div", null, /* @__PURE__ */ import_react23.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Total Questions"), /* @__PURE__ */ import_react23.default.createElement("div", { className: "px-3 py-2 rounded-xl bg-orange-100/60 border border-orange-200 text-orange-800 font-bold text-center" }, questions.length, " Questions"))), /* @__PURE__ */ import_react23.default.createElement("div", { className: "border border-slate-200 rounded-2xl overflow-hidden bg-white" }, /* @__PURE__ */ import_react23.default.createElement("div", { className: "flex items-center justify-between px-3.5 py-2.5 bg-slate-100/80 border-b border-slate-200" }, /* @__PURE__ */ import_react23.default.createElement("div", { className: "flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" }, questions.map((q, idx) => /* @__PURE__ */ import_react23.default.createElement(
+        "button",
+        {
+          key: idx,
+          type: "button",
+          onClick: () => setActiveQuestionIndex(idx),
+          className: `px-3 py-1 rounded-lg font-bold text-xs transition ${activeQuestionIndex === idx ? "bg-orange-600 text-white shadow-sm" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"}`
+        },
+        "Q",
+        idx + 1
+      )), /* @__PURE__ */ import_react23.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: handleAddQuestion,
+          className: "px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 font-bold text-xs transition flex items-center gap-1"
+        },
+        /* @__PURE__ */ import_react23.default.createElement("span", null, "+ Add Q")
+      )), questions.length > 1 && /* @__PURE__ */ import_react23.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => handleRemoveQuestion(activeQuestionIndex),
+          className: "text-rose-600 hover:text-rose-700 font-semibold text-[11px] flex items-center gap-1 shrink-0 ml-2"
+        },
+        /* @__PURE__ */ import_react23.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react23.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" })),
+        /* @__PURE__ */ import_react23.default.createElement("span", null, "Delete Q", activeQuestionIndex + 1)
+      )), currentQ && /* @__PURE__ */ import_react23.default.createElement("div", { className: "p-4 space-y-4" }, /* @__PURE__ */ import_react23.default.createElement("div", null, /* @__PURE__ */ import_react23.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Question #", activeQuestionIndex + 1, " Text ", /* @__PURE__ */ import_react23.default.createElement("span", { className: "text-rose-500" }, "*")), /* @__PURE__ */ import_react23.default.createElement(
+        "textarea",
+        {
+          rows: 2,
+          value: currentQ.question_text,
+          onChange: (e) => handleUpdateCurrentQuestion("question_text", e.target.value),
+          placeholder: "Enter the assessment question...",
+          className: "w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-orange-500 font-medium text-slate-800 outline-none resize-none"
+        }
+      )), /* @__PURE__ */ import_react23.default.createElement("div", null, /* @__PURE__ */ import_react23.default.createElement("div", { className: "flex items-center justify-between mb-2" }, /* @__PURE__ */ import_react23.default.createElement("label", { className: "font-bold text-slate-700 uppercase tracking-wider text-[10px]" }, "Answer Options (Select radio to designate correct answer) ", /* @__PURE__ */ import_react23.default.createElement("span", { className: "text-rose-500" }, "*")), currentQ.options.length < 6 && /* @__PURE__ */ import_react23.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: handleAddOption,
+          className: "text-orange-600 hover:text-orange-700 font-semibold text-[11px]"
+        },
+        "+ Add Option"
+      )), /* @__PURE__ */ import_react23.default.createElement("div", { className: "space-y-2" }, currentQ.options.map((opt, optIdx) => /* @__PURE__ */ import_react23.default.createElement(
+        "div",
+        {
+          key: optIdx,
+          className: `flex items-center gap-2.5 p-2 rounded-xl border transition ${opt.is_correct ? "border-emerald-400 bg-emerald-50/50" : "border-slate-200 bg-white"}`
+        },
+        /* @__PURE__ */ import_react23.default.createElement(
+          "input",
+          {
+            type: "radio",
+            name: `correct_opt_${activeQuestionIndex}`,
+            checked: opt.is_correct,
+            onChange: () => handleSetCorrectOption(optIdx),
+            className: "w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer",
+            title: "Mark as correct answer"
+          }
+        ),
+        /* @__PURE__ */ import_react23.default.createElement("span", { className: "font-mono font-bold text-slate-400 text-xs w-4" }, String.fromCharCode(65 + optIdx), "."),
+        /* @__PURE__ */ import_react23.default.createElement(
+          "input",
+          {
+            type: "text",
+            value: opt.option_text,
+            onChange: (e) => handleUpdateOption(optIdx, e.target.value),
+            placeholder: `Option ${String.fromCharCode(65 + optIdx)} text`,
+            className: "flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 focus:border-orange-500 bg-white text-slate-800 font-medium text-xs outline-none"
+          }
+        ),
+        opt.is_correct && /* @__PURE__ */ import_react23.default.createElement("span", { className: "px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[10px] shrink-0" }, "\u2713 Correct"),
+        currentQ.options.length > 2 && /* @__PURE__ */ import_react23.default.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => handleRemoveOption(optIdx),
+            className: "text-slate-400 hover:text-rose-600 p-1 transition",
+            title: "Remove option"
+          },
+          /* @__PURE__ */ import_react23.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react23.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M6 18L18 6M6 6l12 12" }))
+        )
+      )))), /* @__PURE__ */ import_react23.default.createElement("div", null, /* @__PURE__ */ import_react23.default.createElement("label", { className: "block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]" }, "Answer Explanation / Regulatory Rationale (Shown upon review)"), /* @__PURE__ */ import_react23.default.createElement(
+        "input",
+        {
+          type: "text",
+          value: currentQ.explanation,
+          onChange: (e) => handleUpdateCurrentQuestion("explanation", e.target.value),
+          placeholder: "Explain why this answer is correct according to policy...",
+          className: "w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-orange-500 bg-white font-medium text-slate-800 text-xs outline-none"
+        }
+      )))), /* @__PURE__ */ import_react23.default.createElement("div", { className: "flex items-center justify-between pt-3 border-t border-slate-100" }, /* @__PURE__ */ import_react23.default.createElement("div", { className: "text-slate-400 text-[11px]" }, questions.length, " questions \u2022 Passing score: ", passingScore, "%"), /* @__PURE__ */ import_react23.default.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ import_react23.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onClose,
+          disabled: isSubmitting,
+          className: "px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition"
+        },
+        "Cancel"
+      ), /* @__PURE__ */ import_react23.default.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: isSubmitting,
+          className: "px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-md shadow-orange-600/20 transition flex items-center gap-2 disabled:opacity-50"
+        },
+        isSubmitting ? /* @__PURE__ */ import_react23.default.createElement(import_react23.default.Fragment, null, /* @__PURE__ */ import_react23.default.createElement("svg", { className: "w-3.5 h-3.5 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react23.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react23.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react23.default.createElement("span", null, "Saving Quiz...")) : /* @__PURE__ */ import_react23.default.createElement("span", null, quiz ? "Save Quiz Changes" : "Create Quiz")
+      ))))
+    );
+  };
+
+  // src/components/course/CourseStudio.tsx
+  var CourseStudio = ({
+    courseId,
+    onBack,
+    existingCategories
+  }) => {
+    const { role } = useAuth();
+    const [course, setCourse] = (0, import_react24.useState)(null);
+    const [loading, setLoading] = (0, import_react24.useState)(true);
+    const [error, setError] = (0, import_react24.useState)(null);
+    const [successMessage, setSuccessMessage] = (0, import_react24.useState)(null);
+    const [selectedType, setSelectedType] = (0, import_react24.useState)("COURSE");
+    const [selectedModule, setSelectedModule] = (0, import_react24.useState)(null);
+    const [selectedLesson, setSelectedLesson] = (0, import_react24.useState)(null);
+    const [selectedQuiz, setSelectedQuiz] = (0, import_react24.useState)(null);
+    const [isEditCourseOpen, setIsEditCourseOpen] = (0, import_react24.useState)(false);
+    const [isModuleModalOpen, setIsModuleModalOpen] = (0, import_react24.useState)(false);
+    const [editingModule, setEditingModule] = (0, import_react24.useState)(null);
+    const [isLessonModalOpen, setIsLessonModalOpen] = (0, import_react24.useState)(false);
+    const [editingLesson, setEditingLesson] = (0, import_react24.useState)(null);
+    const [targetModuleForLesson, setTargetModuleForLesson] = (0, import_react24.useState)(null);
+    const [isQuizModalOpen, setIsQuizModalOpen] = (0, import_react24.useState)(false);
+    const [editingQuiz, setEditingQuiz] = (0, import_react24.useState)(null);
+    const [targetModuleForQuiz, setTargetModuleForQuiz] = (0, import_react24.useState)(null);
+    const [isPreviewOpen, setIsPreviewOpen] = (0, import_react24.useState)(false);
+    const isReadOnly = role === "REPORTING_ADMIN";
+    const loadCourse = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchCourseDetail(courseId);
+        if (!data) {
+          setError("Course not found in database.");
+        } else {
+          setCourse(data);
+          if (selectedType === "MODULE" && selectedModule) {
+            const updated = data.modules?.find((m) => m.id === selectedModule.id) || null;
+            setSelectedModule(updated);
+          } else if (selectedType === "LESSON" && selectedLesson) {
+            const allLessons = data.modules?.flatMap((m) => m.lessons || []) || [];
+            const updated = allLessons.find((l) => l.id === selectedLesson.id) || null;
+            setSelectedLesson(updated);
+          } else if (selectedType === "QUIZ" && selectedQuiz) {
+            const allQuizzes = data.modules?.flatMap((m) => m.quizzes || []) || [];
+            const updated = allQuizzes.find((q) => q.id === selectedQuiz.id) || null;
+            setSelectedQuiz(updated);
+          }
+        }
+      } catch (err) {
+        setError(err?.message || "Error loading course curriculum.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    import_react24.default.useEffect(() => {
+      loadCourse();
+    }, [courseId]);
+    const showNotification = (msg) => {
+      setSuccessMessage(msg);
+      setTimeout(() => setSuccessMessage(null), 4e3);
+    };
+    const handleOpenAddModule = () => {
+      setEditingModule(null);
+      setIsModuleModalOpen(true);
+    };
+    const handleOpenEditModule = (mod) => {
+      setEditingModule(mod);
+      setIsModuleModalOpen(true);
+    };
+    const handleSaveModule = async (input) => {
+      if (editingModule) {
+        await updateModule(editingModule.id, input);
+        showNotification("Module updated successfully.");
+      } else {
+        await createModule(courseId, input);
+        showNotification("Module created successfully.");
+      }
+      await loadCourse();
+    };
+    const handleMoveModule = async (index, direction) => {
+      if (!course?.modules) return;
+      const modules2 = [...course.modules];
+      const targetIndex = direction === "UP" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= modules2.length) return;
+      const temp = modules2[index];
+      modules2[index] = modules2[targetIndex];
+      modules2[targetIndex] = temp;
+      const payload = modules2.map((m, idx) => ({ id: m.id, sequence_order: idx + 1 }));
+      await reorderModules(payload);
+      await loadCourse();
+    };
+    const handleOpenAddLesson = (mod) => {
+      setTargetModuleForLesson(mod);
+      setEditingLesson(null);
+      setIsLessonModalOpen(true);
+    };
+    const handleOpenEditLesson = (lesson, mod) => {
+      setTargetModuleForLesson(mod);
+      setEditingLesson(lesson);
+      setIsLessonModalOpen(true);
+    };
+    const handleSaveLesson = async (input) => {
+      if (editingLesson) {
+        await updateLesson(editingLesson.id, input);
+        showNotification("Lesson updated successfully.");
+      } else if (targetModuleForLesson) {
+        await createLesson(targetModuleForLesson.id, input);
+        showNotification("Lesson added to module.");
+      }
+      await loadCourse();
+    };
+    const handleMoveLesson = async (mod, lessonIndex, direction) => {
+      if (!mod.lessons) return;
+      const lessons = [...mod.lessons];
+      const targetIndex = direction === "UP" ? lessonIndex - 1 : lessonIndex + 1;
+      if (targetIndex < 0 || targetIndex >= lessons.length) return;
+      const temp = lessons[lessonIndex];
+      lessons[lessonIndex] = lessons[targetIndex];
+      lessons[targetIndex] = temp;
+      const payload = lessons.map((l, idx) => ({ id: l.id, sequence_order: idx + 1 }));
+      await reorderLessons(payload);
+      await loadCourse();
+    };
+    const handleOpenAddQuiz = (mod) => {
+      setTargetModuleForQuiz(mod);
+      setEditingQuiz(null);
+      setIsQuizModalOpen(true);
+    };
+    const handleOpenEditQuiz = (quiz, mod) => {
+      setTargetModuleForQuiz(mod);
+      setEditingQuiz(quiz);
+      setIsQuizModalOpen(true);
+    };
+    const handleSaveQuiz = async (input) => {
+      await saveQuizWithQuestions(input);
+      showNotification("Assessment quiz saved successfully.");
+      await loadCourse();
+    };
+    const handleTogglePublish = async () => {
+      if (!course) return;
+      try {
+        const willPublish = !course.is_active;
+        const updated = await toggleCoursePublish(course.id, willPublish, course);
+        setCourse(updated);
+        showNotification(willPublish ? "Course published successfully and ready for assignments." : "Course changed to DRAFT status.");
+      } catch (err) {
+        setError(err?.message || "Publish status update failed.");
+      }
+    };
+    if (loading) {
+      return /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex flex-col items-center justify-center min-h-[400px] text-slate-500" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-8 h-8 animate-spin text-orange-600 mb-3", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react24.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react24.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react24.default.createElement("span", { className: "font-semibold text-xs" }, "Loading Course Curriculum Studio..."));
+    }
+    if (!course) {
+      return /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-8 text-center bg-white rounded-2xl border border-slate-200" }, /* @__PURE__ */ import_react24.default.createElement("h3", { className: "text-base font-bold text-slate-800 mb-2" }, "Course Not Found"), /* @__PURE__ */ import_react24.default.createElement("p", { className: "text-xs text-slate-500 mb-4" }, error || "The requested course record does not exist."), /* @__PURE__ */ import_react24.default.createElement(
+        "button",
+        {
+          onClick: onBack,
+          className: "px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+        },
+        "\u2190 Return to Courses Catalog"
+      ));
+    }
+    const modules = course.modules || [];
+    const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
+    const totalQuizzes = modules.reduce((sum, m) => sum + (m.quizzes?.length || 0), 0);
+    const canPublish = modules.length > 0 && (totalLessons > 0 || totalQuizzes > 0);
+    return /* @__PURE__ */ import_react24.default.createElement("div", { className: "space-y-4" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-4 shadow-sm" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex flex-col lg:flex-row lg:items-center justify-between gap-4" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-start gap-3" }, /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: onBack,
+        className: "p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition shrink-0",
+        title: "Return to Course Catalog"
+      },
+      /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M10 19l-7-7m0 0l7-7m-7 7h18" }))
+    ), /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2 flex-wrap mb-1" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2.5 py-0.5 rounded-md bg-orange-100 text-orange-800 font-bold text-[10px] uppercase" }, course.category), /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-[10px]" }, course.difficulty || "Intermediate"), /* @__PURE__ */ import_react24.default.createElement("span", { className: `px-2.5 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1 ${course.is_active ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-amber-100 text-amber-800 border border-amber-300"}` }, /* @__PURE__ */ import_react24.default.createElement("span", { className: `w-1.5 h-1.5 rounded-full ${course.is_active ? "bg-emerald-600" : "bg-amber-600"}` }), /* @__PURE__ */ import_react24.default.createElement("span", null, course.is_active ? "PUBLISHED" : "DRAFT")), course.code && /* @__PURE__ */ import_react24.default.createElement("span", { className: "font-mono text-slate-400 text-xs" }, "Code: ", course.code)), /* @__PURE__ */ import_react24.default.createElement("h1", { className: "text-xl font-bold text-slate-900 leading-tight" }, course.title), /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-4 text-slate-500 text-xs mt-1" }, /* @__PURE__ */ import_react24.default.createElement("span", null, "\u23F1 ", course.estimated_duration_minutes || 30, " Min Est."), /* @__PURE__ */ import_react24.default.createElement("span", null, "\u2022"), /* @__PURE__ */ import_react24.default.createElement("span", null, modules.length, " Modules"), /* @__PURE__ */ import_react24.default.createElement("span", null, "\u2022"), /* @__PURE__ */ import_react24.default.createElement("span", null, totalLessons, " Lessons"), /* @__PURE__ */ import_react24.default.createElement("span", null, "\u2022"), /* @__PURE__ */ import_react24.default.createElement("span", null, totalQuizzes, " Assessment Quizzes")))), /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2 flex-wrap" }, /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setIsPreviewOpen(true),
+        className: "px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition flex items-center gap-1.5 shadow-sm"
+      },
+      /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4 text-orange-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z" }), /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" })),
+      /* @__PURE__ */ import_react24.default.createElement("span", null, "Preview Course")
+    ), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(import_react24.default.Fragment, null, /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setIsEditCourseOpen(true),
+        className: "px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition flex items-center gap-1.5 shadow-sm"
+      },
+      /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4 text-slate-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" })),
+      /* @__PURE__ */ import_react24.default.createElement("span", null, "Edit Metadata")
+    ), /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: handleTogglePublish,
+        className: `px-4 py-2 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 ${course.is_active ? "bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20" : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"}`,
+        title: !canPublish && !course.is_active ? "Add at least 1 module and 1 lesson/quiz before publishing" : ""
+      },
+      course.is_active ? /* @__PURE__ */ import_react24.default.createElement(import_react24.default.Fragment, null, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" })), /* @__PURE__ */ import_react24.default.createElement("span", null, "Unpublish to Draft")) : /* @__PURE__ */ import_react24.default.createElement(import_react24.default.Fragment, null, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react24.default.createElement("span", null, "Publish Course"))
+    )))), error && /* @__PURE__ */ import_react24.default.createElement("div", { className: "mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react24.default.createElement("span", null, error)), /* @__PURE__ */ import_react24.default.createElement("button", { onClick: () => setError(null), className: "text-rose-500 hover:text-rose-700 font-bold text-xs" }, "\u2715")), successMessage && /* @__PURE__ */ import_react24.default.createElement("div", { className: "mt-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-emerald-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" })), /* @__PURE__ */ import_react24.default.createElement("span", null, successMessage)), /* @__PURE__ */ import_react24.default.createElement("button", { onClick: () => setSuccessMessage(null), className: "text-emerald-500 hover:text-emerald-700 font-bold text-xs" }, "\u2715"))), /* @__PURE__ */ import_react24.default.createElement("div", { className: "grid grid-cols-1 lg:grid-cols-12 gap-4 items-start" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "lg:col-span-5 space-y-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-4 shadow-sm" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center justify-between mb-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("h2", { className: "text-xs font-bold text-slate-800 uppercase tracking-wider" }, "Curriculum Structure"), /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-mono font-bold" }, modules.length, " Modules")), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: handleOpenAddModule,
+        className: "px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-sm transition flex items-center gap-1"
+      },
+      /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6v6m0 0v6m0-6h6m-6 0H6" })),
+      /* @__PURE__ */ import_react24.default.createElement("span", null, "Add Module")
+    )), /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => {
+          setSelectedType("COURSE");
+          setSelectedModule(null);
+          setSelectedLesson(null);
+          setSelectedQuiz(null);
+        },
+        className: `w-full text-left p-3 rounded-xl border text-xs transition mb-3 flex items-center justify-between ${selectedType === "COURSE" ? "border-orange-500 bg-orange-50/70 text-orange-950 ring-2 ring-orange-500/20" : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"}`
+      },
+      /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-4 h-4 text-orange-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" })), /* @__PURE__ */ import_react24.default.createElement("span", { className: "font-bold" }, "Course Master & Syllabus Summary")),
+      /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-[10px] text-slate-400 font-mono" }, "Overview")
+    ), /* @__PURE__ */ import_react24.default.createElement("div", { className: "space-y-3" }, modules.length === 0 ? /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-6 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-8 h-8 mx-auto text-slate-400 mb-2", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 1.5, d: "M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })), /* @__PURE__ */ import_react24.default.createElement("div", { className: "font-bold text-slate-700 text-xs mb-1" }, "No Modules Yet"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[11px] text-slate-500 mb-3" }, "Begin structuring this course by creating the first module."), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: handleOpenAddModule,
+        className: "px-3.5 py-1.5 bg-orange-600 text-white rounded-xl font-bold text-xs"
+      },
+      "+ Create First Module"
+    )) : modules.map((mod, modIdx) => {
+      const isModSelected = selectedType === "MODULE" && selectedModule?.id === mod.id;
+      return /* @__PURE__ */ import_react24.default.createElement(
+        "div",
+        {
+          key: mod.id,
+          className: `border rounded-2xl overflow-hidden transition ${isModSelected ? "border-orange-500 shadow-sm ring-1 ring-orange-500/30 bg-white" : "border-slate-200 bg-white"}`
+        },
+        /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between" }, /* @__PURE__ */ import_react24.default.createElement(
+          "div",
+          {
+            className: "flex items-center gap-2 cursor-pointer flex-1 min-w-0",
+            onClick: () => {
+              setSelectedType("MODULE");
+              setSelectedModule(mod);
+              setSelectedLesson(null);
+              setSelectedQuiz(null);
+            }
+          },
+          /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-bold text-[10px] shrink-0 font-mono" }, "M", modIdx + 1),
+          /* @__PURE__ */ import_react24.default.createElement("span", { className: "font-bold text-slate-900 text-xs truncate" }, mod.title)
+        ), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-1 shrink-0 ml-2" }, /* @__PURE__ */ import_react24.default.createElement(
+          "button",
+          {
+            type: "button",
+            disabled: modIdx === 0,
+            onClick: () => handleMoveModule(modIdx, "UP"),
+            className: "p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30",
+            title: "Move Module Up"
+          },
+          /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 15l7-7 7 7" }))
+        ), /* @__PURE__ */ import_react24.default.createElement(
+          "button",
+          {
+            type: "button",
+            disabled: modIdx === modules.length - 1,
+            onClick: () => handleMoveModule(modIdx, "DOWN"),
+            className: "p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30",
+            title: "Move Module Down"
+          },
+          /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M19 9l-7 7-7-7" }))
+        ), /* @__PURE__ */ import_react24.default.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => handleOpenEditModule(mod),
+            className: "p-1 text-slate-400 hover:text-slate-700",
+            title: "Edit Module Title"
+          },
+          /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" }))
+        ))),
+        /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-2 space-y-1.5" }, (mod.lessons || []).map((les, lesIdx) => {
+          const isLesSelected = selectedType === "LESSON" && selectedLesson?.id === les.id;
+          return /* @__PURE__ */ import_react24.default.createElement(
+            "div",
+            {
+              key: les.id,
+              className: `p-2 rounded-xl border text-xs transition flex items-center justify-between gap-2 ${isLesSelected ? "border-orange-500 bg-orange-50/70 text-orange-950 font-bold" : "border-slate-100 bg-slate-50/40 hover:bg-slate-100/60 text-slate-700"}`
+            },
+            /* @__PURE__ */ import_react24.default.createElement(
+              "div",
+              {
+                className: "flex items-center gap-2 flex-1 min-w-0 cursor-pointer",
+                onClick: () => {
+                  setSelectedType("LESSON");
+                  setSelectedLesson(les);
+                  setSelectedModule(mod);
+                  setSelectedQuiz(null);
+                }
+              },
+              les.content_type === "VIDEO" ? /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5 text-orange-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" }), /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })) : les.content_type === "PDF" ? /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5 text-red-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" })) : /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5 text-indigo-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" })),
+              /* @__PURE__ */ import_react24.default.createElement("span", { className: "truncate text-[11px]" }, lesIdx + 1, ". ", les.title)
+            ),
+            /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-1 shrink-0" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-[10px] text-slate-400 font-mono" }, les.duration_minutes || 5, "m"), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(import_react24.default.Fragment, null, /* @__PURE__ */ import_react24.default.createElement(
+              "button",
+              {
+                type: "button",
+                disabled: lesIdx === 0,
+                onClick: () => handleMoveLesson(mod, lesIdx, "UP"),
+                className: "p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+              },
+              /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3 h-3", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 15l7-7 7 7" }))
+            ), /* @__PURE__ */ import_react24.default.createElement(
+              "button",
+              {
+                type: "button",
+                disabled: lesIdx === (mod.lessons?.length || 1) - 1,
+                onClick: () => handleMoveLesson(mod, lesIdx, "DOWN"),
+                className: "p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+              },
+              /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3 h-3", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M19 9l-7 7-7-7" }))
+            ), /* @__PURE__ */ import_react24.default.createElement(
+              "button",
+              {
+                type: "button",
+                onClick: () => handleOpenEditLesson(les, mod),
+                className: "p-0.5 text-slate-400 hover:text-slate-700",
+                title: "Edit Lesson"
+              },
+              /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3 h-3", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" }))
+            )))
+          );
+        }), (mod.quizzes || []).map((qz, qzIdx) => {
+          const isQzSelected = selectedType === "QUIZ" && selectedQuiz?.id === qz.id;
+          return /* @__PURE__ */ import_react24.default.createElement(
+            "div",
+            {
+              key: qz.id,
+              className: `p-2 rounded-xl border text-xs transition flex items-center justify-between gap-2 ${isQzSelected ? "border-amber-500 bg-amber-50/70 text-amber-950 font-bold" : "border-amber-100 bg-amber-50/30 hover:bg-amber-100/50 text-amber-900"}`
+            },
+            /* @__PURE__ */ import_react24.default.createElement(
+              "div",
+              {
+                className: "flex items-center gap-2 flex-1 min-w-0 cursor-pointer",
+                onClick: () => {
+                  setSelectedType("QUIZ");
+                  setSelectedQuiz(qz);
+                  setSelectedModule(mod);
+                  setSelectedLesson(null);
+                }
+              },
+              /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3.5 h-3.5 text-amber-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" })),
+              /* @__PURE__ */ import_react24.default.createElement("span", { className: "truncate text-[11px]" }, "Assessment: ", qz.title)
+            ),
+            /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-1.5 shrink-0" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-[10px] px-1.5 py-0.5 rounded bg-amber-200/60 font-bold" }, qz.questions?.length || 0, " Qs"), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(
+              "button",
+              {
+                type: "button",
+                onClick: () => handleOpenEditQuiz(qz, mod),
+                className: "p-0.5 text-amber-700 hover:text-amber-900",
+                title: "Edit Quiz"
+              },
+              /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-3 h-3", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" }))
+            ))
+          );
+        }), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2 pt-1" }, /* @__PURE__ */ import_react24.default.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => handleOpenAddLesson(mod),
+            className: "flex-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[10px] transition text-center"
+          },
+          "+ Add Lesson"
+        ), /* @__PURE__ */ import_react24.default.createElement(
+          "button",
+          {
+            type: "button",
+            onClick: () => handleOpenAddQuiz(mod),
+            className: "flex-1 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-[10px] transition text-center"
+          },
+          "+ Add Assessment Quiz"
+        )))
+      );
+    })))), /* @__PURE__ */ import_react24.default.createElement("div", { className: "lg:col-span-7 space-y-4" }, selectedType === "COURSE" && /* @__PURE__ */ import_react24.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center justify-between border-b border-slate-100 pb-3" }, /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("h3", { className: "text-sm font-bold text-slate-900" }, "Curriculum Master Overview"), /* @__PURE__ */ import_react24.default.createElement("p", { className: "text-xs text-slate-500" }, "Master configuration, syllabus overview, and publication readiness checklist.")), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setIsEditCourseOpen(true),
+        className: "px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
+      },
+      "Edit Details"
+    )), course.thumbnail_url && /* @__PURE__ */ import_react24.default.createElement("div", { className: "h-44 w-full rounded-xl overflow-hidden border border-slate-100 bg-slate-100" }, /* @__PURE__ */ import_react24.default.createElement("img", { src: course.thumbnail_url, alt: course.title, className: "w-full h-full object-cover" })), /* @__PURE__ */ import_react24.default.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[10px] uppercase font-bold text-slate-400" }, "Total Modules"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-base font-bold text-slate-900 mt-0.5" }, modules.length)), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[10px] uppercase font-bold text-slate-400" }, "Total Lessons"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-base font-bold text-slate-900 mt-0.5" }, totalLessons)), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[10px] uppercase font-bold text-slate-400" }, "Assessment Quizzes"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-base font-bold text-slate-900 mt-0.5" }, totalQuizzes)), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[10px] uppercase font-bold text-slate-400" }, "Duration"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-base font-bold text-slate-900 mt-0.5" }, course.estimated_duration_minutes || 30, "m"))), /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("h4", { className: "font-bold text-slate-800 text-xs uppercase tracking-wider mb-1.5" }, "Curriculum Description"), /* @__PURE__ */ import_react24.default.createElement("p", { className: "text-xs text-slate-600 leading-relaxed bg-slate-50/70 p-3.5 rounded-xl border border-slate-100 whitespace-pre-line" }, course.description || "No detailed course description provided yet.")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-4 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-3" }, /* @__PURE__ */ import_react24.default.createElement("h4", { className: "font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center justify-between" }, /* @__PURE__ */ import_react24.default.createElement("span", null, "Publication Readiness Checklist"), /* @__PURE__ */ import_react24.default.createElement("span", { className: `px-2 py-0.5 rounded text-[10px] font-mono font-bold ${canPublish ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}` }, canPublish ? "READY TO PUBLISH" : "PENDING CONTENT")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "space-y-2 text-xs" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: `w-4 h-4 rounded-full flex items-center justify-center font-bold text-[10px] ${modules.length > 0 ? "bg-emerald-500 text-white" : "bg-slate-300 text-slate-600"}` }, modules.length > 0 ? "\u2713" : "\u2022"), /* @__PURE__ */ import_react24.default.createElement("span", { className: modules.length > 0 ? "text-slate-800 font-medium" : "text-slate-400" }, "At least 1 Curriculum Module defined (", modules.length, " created)")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: `w-4 h-4 rounded-full flex items-center justify-center font-bold text-[10px] ${totalLessons > 0 ? "bg-emerald-500 text-white" : "bg-slate-300 text-slate-600"}` }, totalLessons > 0 ? "\u2713" : "\u2022"), /* @__PURE__ */ import_react24.default.createElement("span", { className: totalLessons > 0 ? "text-slate-800 font-medium" : "text-slate-400" }, "Lesson content populated (", totalLessons, " lessons created)")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: `w-4 h-4 rounded-full flex items-center justify-center font-bold text-[10px] ${totalQuizzes > 0 ? "bg-emerald-500 text-white" : "bg-slate-300 text-slate-600"}` }, totalQuizzes > 0 ? "\u2713" : "\u2022"), /* @__PURE__ */ import_react24.default.createElement("span", { className: totalQuizzes > 0 ? "text-slate-800 font-medium" : "text-slate-400" }, "Assessment quiz added (", totalQuizzes, " quizzes configured)"))))), selectedType === "MODULE" && selectedModule && /* @__PURE__ */ import_react24.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center justify-between border-b border-slate-100 pb-3" }, /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-mono font-bold text-[10px]" }, "MODULE #", selectedModule.sequence_order), /* @__PURE__ */ import_react24.default.createElement("h3", { className: "text-base font-bold text-slate-900 mt-1" }, selectedModule.title)), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => handleOpenEditModule(selectedModule),
+        className: "px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
+      },
+      "Edit Module"
+    )), /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("h4", { className: "font-bold text-slate-700 text-xs uppercase tracking-wider mb-1" }, "Module Summary / Key Outcomes"), /* @__PURE__ */ import_react24.default.createElement("p", { className: "text-xs text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 leading-relaxed" }, selectedModule.description || "No module description provided.")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "grid grid-cols-2 gap-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[10px] font-bold text-slate-400 uppercase" }, "Lessons in Module"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-sm font-bold text-slate-900 mt-0.5" }, selectedModule.lessons?.length || 0, " Lessons")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-100 rounded-xl" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[10px] font-bold text-slate-400 uppercase" }, "Quizzes in Module"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-sm font-bold text-slate-900 mt-0.5" }, selectedModule.quizzes?.length || 0, " Quizzes"))), !isReadOnly && /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-3 pt-2" }, /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => handleOpenAddLesson(selectedModule),
+        className: "flex-1 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-xs shadow-sm transition"
+      },
+      "+ Add Lesson to Module"
+    ), /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => handleOpenAddQuiz(selectedModule),
+        className: "flex-1 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-sm transition"
+      },
+      "+ Add Assessment Quiz"
+    ))), selectedType === "LESSON" && selectedLesson && /* @__PURE__ */ import_react24.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center justify-between border-b border-slate-100 pb-3" }, /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2 mb-1" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px]" }, selectedLesson.content_type), /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-slate-400 text-xs font-mono" }, "\u23F1 ", selectedLesson.duration_minutes || 5, " min")), /* @__PURE__ */ import_react24.default.createElement("h3", { className: "text-base font-bold text-slate-900" }, selectedLesson.title)), !isReadOnly && selectedModule && /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => handleOpenEditLesson(selectedLesson, selectedModule),
+        className: "px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
+      },
+      "Edit Content"
+    )), selectedLesson.content_type === "VIDEO" && /* @__PURE__ */ import_react24.default.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "aspect-video w-full rounded-2xl bg-slate-900 flex flex-col items-center justify-center text-white p-6 shadow-inner relative overflow-hidden" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "w-14 h-14 rounded-full bg-orange-600 text-white flex items-center justify-center shadow-lg" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-6 h-6 ml-1", fill: "currentColor", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react24.default.createElement("path", { d: "M8 5v14l11-7z" }))), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-xs text-slate-300 font-mono mt-3 truncate max-w-sm" }, selectedLesson.video_url || "Internal Asset URL")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-slate-600 font-bold" }, "Video Stream URL:"), /* @__PURE__ */ import_react24.default.createElement("code", { className: "text-orange-600 text-xs" }, selectedLesson.video_url || "No URL specified"))), selectedLesson.content_type === "PDF" && /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-6 border border-red-200 bg-red-50/40 rounded-2xl flex items-center justify-between" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0" }, /* @__PURE__ */ import_react24.default.createElement("svg", { className: "w-5 h-5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react24.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" }))), /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("div", { className: "font-bold text-slate-900 text-xs" }, "PDF Document Asset"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[11px] text-slate-500 font-mono truncate max-w-xs" }, selectedLesson.pdf_url || "sample.pdf"))), selectedLesson.pdf_url && /* @__PURE__ */ import_react24.default.createElement(
+      "a",
+      {
+        href: selectedLesson.pdf_url,
+        target: "_blank",
+        rel: "noreferrer",
+        className: "px-3 py-1.5 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition"
+      },
+      "Open PDF"
+    )), (selectedLesson.content_type === "TEXT" || selectedLesson.content_type === "ARTICLE") && /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("h4", { className: "font-bold text-slate-700 text-xs uppercase tracking-wider mb-1.5" }, "Article Reader Content"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-800 leading-relaxed whitespace-pre-line font-sans" }, selectedLesson.content_text || "No article content provided."))), selectedType === "QUIZ" && selectedQuiz && /* @__PURE__ */ import_react24.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center justify-between border-b border-slate-100 pb-3" }, /* @__PURE__ */ import_react24.default.createElement("div", null, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-center gap-2 mb-1" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]" }, "ASSESSMENT QUIZ"), /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-slate-400 text-xs" }, "Passing: ", selectedQuiz.passing_score, "%")), /* @__PURE__ */ import_react24.default.createElement("h3", { className: "text-base font-bold text-slate-900" }, selectedQuiz.title)), !isReadOnly && selectedModule && /* @__PURE__ */ import_react24.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => handleOpenEditQuiz(selectedQuiz, selectedModule),
+        className: "px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-sm transition"
+      },
+      "Open Quiz Builder"
+    )), /* @__PURE__ */ import_react24.default.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "font-bold text-slate-800 text-xs uppercase tracking-wider" }, "Configured Questions (", (selectedQuiz.questions || []).length, ")"), (selectedQuiz.questions || []).map((q, qIdx) => /* @__PURE__ */ import_react24.default.createElement("div", { key: q.id || qIdx, className: "p-3.5 border border-slate-200 rounded-xl bg-slate-50 space-y-2 text-xs" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "flex items-start justify-between gap-2" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "font-bold text-slate-900" }, qIdx + 1, ". ", q.question_text), /* @__PURE__ */ import_react24.default.createElement("span", { className: "px-2 py-0.5 rounded bg-slate-200 font-bold text-slate-600 text-[10px] shrink-0" }, q.points || 1, " Pt")), /* @__PURE__ */ import_react24.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1" }, (q.options || []).map((opt, optIdx) => /* @__PURE__ */ import_react24.default.createElement(
+      "div",
+      {
+        key: opt.id || optIdx,
+        className: `p-2 rounded-lg border text-xs flex items-center justify-between ${opt.is_correct ? "border-emerald-400 bg-emerald-50 text-emerald-900 font-bold" : "border-slate-200 bg-white text-slate-700"}`
+      },
+      /* @__PURE__ */ import_react24.default.createElement("span", { className: "truncate" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "font-mono opacity-50 mr-1.5" }, String.fromCharCode(65 + optIdx), "."), opt.option_text),
+      opt.is_correct && /* @__PURE__ */ import_react24.default.createElement("span", { className: "text-emerald-700 text-[10px] font-bold shrink-0 ml-1" }, "\u2713 Correct")
+    ))), q.explanation && /* @__PURE__ */ import_react24.default.createElement("div", { className: "text-[11px] text-slate-500 italic pt-1" }, "Rationale: ", q.explanation))))))), isEditCourseOpen && /* @__PURE__ */ import_react24.default.createElement(
+      EditCourseModal,
+      {
+        isOpen: isEditCourseOpen,
+        onClose: () => setIsEditCourseOpen(false),
+        course,
+        onSubmit: async (input) => {
+          await updateCourse(course.id, input, course);
+          showNotification("Course metadata updated.");
+          await loadCourse();
+        },
+        existingCategories
+      }
+    ), isModuleModalOpen && /* @__PURE__ */ import_react24.default.createElement(
+      ModuleModal,
+      {
+        isOpen: isModuleModalOpen,
+        onClose: () => setIsModuleModalOpen(false),
+        module: editingModule,
+        courseTitle: course.title,
+        nextOrder: modules.length + 1,
+        onSubmit: handleSaveModule
+      }
+    ), isLessonModalOpen && /* @__PURE__ */ import_react24.default.createElement(
+      LessonModal,
+      {
+        isOpen: isLessonModalOpen,
+        onClose: () => setIsLessonModalOpen(false),
+        lesson: editingLesson,
+        moduleTitle: targetModuleForLesson?.title || "",
+        nextOrder: (targetModuleForLesson?.lessons?.length || 0) + 1,
+        onSubmit: handleSaveLesson
+      }
+    ), isQuizModalOpen && /* @__PURE__ */ import_react24.default.createElement(
+      QuizBuilderModal,
+      {
+        isOpen: isQuizModalOpen,
+        onClose: () => setIsQuizModalOpen(false),
+        quiz: editingQuiz,
+        courseId: course.id,
+        moduleId: targetModuleForQuiz?.id,
+        parentTitle: targetModuleForQuiz?.title || course.title,
+        onSubmit: handleSaveQuiz
+      }
+    ), isPreviewOpen && /* @__PURE__ */ import_react24.default.createElement(
+      CoursePreviewModal,
+      {
+        isOpen: isPreviewOpen,
+        onClose: () => setIsPreviewOpen(false),
+        course
+      }
+    ));
+  };
+
+  // src/pages/CoursesPage.tsx
+  var CoursesPage = () => {
+    const { role } = useAuth();
+    const [courses, setCourses] = (0, import_react25.useState)([]);
+    const [totalCount, setTotalCount] = (0, import_react25.useState)(0);
+    const [categories, setCategories] = (0, import_react25.useState)([]);
+    const [loading, setLoading] = (0, import_react25.useState)(true);
+    const [error, setError] = (0, import_react25.useState)(null);
+    const [successMessage, setSuccessMessage] = (0, import_react25.useState)(null);
+    const [activeStudioCourseId, setActiveStudioCourseId] = (0, import_react25.useState)(null);
+    const [filters, setFilters] = (0, import_react25.useState)({
+      search: "",
+      category: "ALL",
+      status: "ALL",
+      sortBy: "created_at",
+      sortOrder: "desc",
+      page: 1,
+      pageSize: 10
+    });
+    const [isCreateModalOpen, setIsCreateModalOpen] = (0, import_react25.useState)(false);
+    const [isEditModalOpen, setIsEditModalOpen] = (0, import_react25.useState)(false);
+    const [editingCourse, setEditingCourse] = (0, import_react25.useState)(null);
+    const [isPreviewModalOpen, setIsPreviewModalOpen] = (0, import_react25.useState)(false);
+    const [previewCourse, setPreviewCourse] = (0, import_react25.useState)(null);
+    const isReadOnly = role === "REPORTING_ADMIN";
+    const canManageCourses = role === "SUPER_ADMIN" || role === "LND_ADMIN" || role === "CONTENT_ADMIN";
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [coursesRes, cats] = await Promise.all([
+          fetchCourses(filters),
+          fetchCourseCategories()
+        ]);
+        setCourses(coursesRes.courses);
+        setTotalCount(coursesRes.totalCount);
+        setCategories(cats);
+      } catch (err) {
+        console.error("Error loading courses:", err);
+        setError(err?.message || "Failed to load courses from Supabase.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    (0, import_react25.useEffect)(() => {
+      if (!activeStudioCourseId) {
+        loadData();
+      }
+    }, [filters, activeStudioCourseId]);
+    const showNotification = (msg) => {
+      setSuccessMessage(msg);
+      setTimeout(() => setSuccessMessage(null), 4e3);
+    };
+    const handleCreateCourse = async (input) => {
+      const created = await createCourse(input);
+      showNotification(`Course "${created.title}" created successfully.`);
+      setIsCreateModalOpen(false);
+      setActiveStudioCourseId(created.id);
+    };
+    const handleOpenEdit = (course) => {
+      setEditingCourse(course);
+      setIsEditModalOpen(true);
+    };
+    const handleUpdateCourse = async (input) => {
+      if (!editingCourse) return;
+      await updateCourse(editingCourse.id, input, editingCourse);
+      showNotification("Course properties updated successfully.");
+      setIsEditModalOpen(false);
+      loadData();
+    };
+    const handleOpenPreview = async (course) => {
+      try {
+        const full = await fetchCourseDetail(course.id);
+        setPreviewCourse(full || course);
+        setIsPreviewModalOpen(true);
+      } catch (err) {
+        setError("Could not load course preview.");
+      }
+    };
+    const handleTogglePublish = async (course) => {
+      try {
+        const willPublish = !course.is_active;
+        await toggleCoursePublish(course.id, willPublish, course);
+        showNotification(
+          willPublish ? `Course "${course.title}" published successfully.` : `Course "${course.title}" set to DRAFT.`
+        );
+        loadData();
+      } catch (err) {
+        setError(err?.message || "Failed to toggle course publish status.");
+      }
+    };
+    if (activeStudioCourseId) {
+      return /* @__PURE__ */ import_react25.default.createElement(
+        CourseStudio,
+        {
+          courseId: activeStudioCourseId,
+          onBack: () => {
+            setActiveStudioCourseId(null);
+            loadData();
+          },
+          existingCategories: categories
+        }
+      );
+    }
+    const publishedCount = courses.filter((c) => c.is_active).length;
+    const draftCount = courses.filter((c) => !c.is_active).length;
+    const totalPages = Math.ceil(totalCount / filters.pageSize) || 1;
+    return /* @__PURE__ */ import_react25.default.createElement("div", { className: "space-y-5" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-5 shadow-sm" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex flex-col sm:flex-row sm:items-center justify-between gap-4" }, /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex items-center gap-2 mb-1" }, /* @__PURE__ */ import_react25.default.createElement("span", { className: "px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wider" }, "Phase 2B \u2022 Course Management"), /* @__PURE__ */ import_react25.default.createElement("span", { className: "text-xs text-slate-400 font-mono" }, "PostgreSQL public.courses")), /* @__PURE__ */ import_react25.default.createElement("h1", { className: "text-2xl font-bold text-slate-900" }, "Courses & Curriculum Management"), /* @__PURE__ */ import_react25.default.createElement("p", { className: "text-xs text-slate-500 mt-0.5" }, "Design, structure, and publish multi-module training programs, lesson materials, and assessment quizzes.")), canManageCourses && /* @__PURE__ */ import_react25.default.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setIsCreateModalOpen(true),
+        className: "px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition flex items-center gap-2 shrink-0"
+      },
+      /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6v6m0 0v6m0-6h6m-6 0H6" })),
+      /* @__PURE__ */ import_react25.default.createElement("span", null, "Create New Course")
+    )), error && /* @__PURE__ */ import_react25.default.createElement("div", { className: "mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-rose-500", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" })), /* @__PURE__ */ import_react25.default.createElement("span", { className: "font-semibold" }, error)), /* @__PURE__ */ import_react25.default.createElement("button", { onClick: () => setError(null), className: "text-rose-500 hover:text-rose-700 font-bold text-xs" }, "\u2715")), successMessage && /* @__PURE__ */ import_react25.default.createElement("div", { className: "mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-4 h-4 shrink-0 text-emerald-600", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" })), /* @__PURE__ */ import_react25.default.createElement("span", { className: "font-semibold" }, successMessage)), /* @__PURE__ */ import_react25.default.createElement("button", { onClick: () => setSuccessMessage(null), className: "text-emerald-500 hover:text-emerald-700 font-bold text-xs" }, "\u2715"))), /* @__PURE__ */ import_react25.default.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[10px] uppercase font-bold text-slate-400 tracking-wider" }, "Total Courses"), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-xl font-bold text-slate-900 mt-1" }, totalCount)), /* @__PURE__ */ import_react25.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[10px] uppercase font-bold text-emerald-600 tracking-wider" }, "Published & Active"), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-xl font-bold text-emerald-700 mt-1" }, publishedCount)), /* @__PURE__ */ import_react25.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[10px] uppercase font-bold text-amber-600 tracking-wider" }, "Drafts in Studio"), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-xl font-bold text-amber-700 mt-1" }, draftCount)), /* @__PURE__ */ import_react25.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[10px] uppercase font-bold text-indigo-600 tracking-wider" }, "Curriculum Categories"), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-xl font-bold text-indigo-700 mt-1" }, categories.length))), /* @__PURE__ */ import_react25.default.createElement("div", { className: "bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "md:col-span-5" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "relative" }, /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-4 h-4 absolute left-3 top-3 text-slate-400", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" })), /* @__PURE__ */ import_react25.default.createElement(
+      "input",
+      {
+        type: "text",
+        value: filters.search,
+        onChange: (e) => setFilters({ ...filters, search: e.target.value, page: 1 }),
+        placeholder: "Search courses by title, description, code...",
+        className: "w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-xs font-medium outline-none transition"
+      }
+    ), filters.search && /* @__PURE__ */ import_react25.default.createElement(
+      "button",
+      {
+        onClick: () => setFilters({ ...filters, search: "", page: 1 }),
+        className: "absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+      },
+      "\u2715"
+    ))), /* @__PURE__ */ import_react25.default.createElement("div", { className: "md:col-span-3" }, /* @__PURE__ */ import_react25.default.createElement(
+      "select",
+      {
+        value: filters.category,
+        onChange: (e) => setFilters({ ...filters, category: e.target.value, page: 1 }),
+        className: "w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 outline-none bg-white"
+      },
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "ALL" }, "All Categories (", categories.length, ")"),
+      categories.map((cat) => /* @__PURE__ */ import_react25.default.createElement("option", { key: cat, value: cat }, cat))
+    )), /* @__PURE__ */ import_react25.default.createElement("div", { className: "md:col-span-2" }, /* @__PURE__ */ import_react25.default.createElement(
+      "select",
+      {
+        value: filters.status,
+        onChange: (e) => setFilters({ ...filters, status: e.target.value, page: 1 }),
+        className: "w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 outline-none bg-white"
+      },
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "ALL" }, "All Statuses"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "PUBLISHED" }, "Published Only"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "DRAFT" }, "Draft Only")
+    )), /* @__PURE__ */ import_react25.default.createElement("div", { className: "md:col-span-2" }, /* @__PURE__ */ import_react25.default.createElement(
+      "select",
+      {
+        value: `${filters.sortBy}_${filters.sortOrder}`,
+        onChange: (e) => {
+          const [sb, so] = e.target.value.split("_");
+          setFilters({ ...filters, sortBy: sb, sortOrder: so, page: 1 });
+        },
+        className: "w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-medium text-slate-800 outline-none bg-white"
+      },
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "created_at_desc" }, "Newest First"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "created_at_asc" }, "Oldest First"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "title_asc" }, "Title (A-Z)"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "title_desc" }, "Title (Z-A)"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "estimated_duration_minutes_desc" }, "Longest Duration"),
+      /* @__PURE__ */ import_react25.default.createElement("option", { value: "estimated_duration_minutes_asc" }, "Shortest Duration")
+    )))), loading ? /* @__PURE__ */ import_react25.default.createElement("div", { className: "p-12 text-center bg-white rounded-2xl border border-slate-200" }, /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-8 h-8 animate-spin mx-auto text-orange-600 mb-3", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react25.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react25.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-xs font-semibold text-slate-600" }, "Querying public.courses...")) : courses.length === 0 ? (
+      /* Explicit Empty State Mandate */
+      /* @__PURE__ */ import_react25.default.createElement("div", { className: "p-12 text-center bg-white rounded-2xl border border-slate-200 space-y-3" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "w-16 h-16 rounded-2xl bg-orange-50 border border-orange-200 text-orange-600 flex items-center justify-center mx-auto shadow-sm" }, /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 1.5, d: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" }))), /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("h3", { className: "text-base font-bold text-slate-900" }, "No courses created yet."), /* @__PURE__ */ import_react25.default.createElement("p", { className: "text-xs text-slate-500 mt-1 max-w-md mx-auto" }, filters.search || filters.category !== "ALL" || filters.status !== "ALL" ? "No courses match your active search filters. Try adjusting your query." : "The database contains 0 course records. Authorized L&D Administrators can create a curriculum program to begin.")), canManageCourses && /* @__PURE__ */ import_react25.default.createElement("div", { className: "pt-2" }, /* @__PURE__ */ import_react25.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setIsCreateModalOpen(true),
+          className: "px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-xs shadow-md shadow-orange-600/20 transition"
+        },
+        "+ Create First Course"
+      )))
+    ) : /* @__PURE__ */ import_react25.default.createElement("div", { className: "space-y-3" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" }, courses.map((course) => /* @__PURE__ */ import_react25.default.createElement(
+      "div",
+      {
+        key: course.id,
+        className: "bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col justify-between"
+      },
+      /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("div", { className: "h-32 w-full bg-slate-100 relative overflow-hidden border-b border-slate-100" }, course.thumbnail_url ? /* @__PURE__ */ import_react25.default.createElement("img", { src: course.thumbnail_url, alt: course.title, className: "w-full h-full object-cover" }) : /* @__PURE__ */ import_react25.default.createElement("div", { className: "w-full h-full bg-gradient-to-br from-orange-500/10 via-amber-500/10 to-indigo-500/10 flex items-center justify-center text-orange-600" }, /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-10 h-10 opacity-40", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 1.5, d: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" }))), /* @__PURE__ */ import_react25.default.createElement("div", { className: "absolute top-2.5 right-2.5" }, /* @__PURE__ */ import_react25.default.createElement("span", { className: `px-2.5 py-0.5 rounded-full font-bold text-[10px] shadow-sm flex items-center gap-1 ${course.is_active ? "bg-emerald-600 text-white" : "bg-amber-600 text-white"}` }, /* @__PURE__ */ import_react25.default.createElement("span", { className: "w-1.5 h-1.5 rounded-full bg-white animate-pulse" }), /* @__PURE__ */ import_react25.default.createElement("span", null, course.is_active ? "PUBLISHED" : "DRAFT"))), /* @__PURE__ */ import_react25.default.createElement("div", { className: "absolute bottom-2.5 left-2.5" }, /* @__PURE__ */ import_react25.default.createElement("span", { className: "px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-white font-bold text-[10px] tracking-wide" }, course.category))), /* @__PURE__ */ import_react25.default.createElement("div", { className: "p-4 space-y-2.5" }, /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex items-center justify-between gap-2" }, /* @__PURE__ */ import_react25.default.createElement("span", { className: "text-[10px] font-bold text-slate-400 font-mono" }, course.code || `ID: #${course.id}`), /* @__PURE__ */ import_react25.default.createElement("span", { className: "text-[10px] font-semibold text-slate-500" }, course.difficulty || "Intermediate")), /* @__PURE__ */ import_react25.default.createElement("h3", { className: "font-bold text-slate-900 text-sm mt-0.5 leading-snug line-clamp-1" }, course.title)), /* @__PURE__ */ import_react25.default.createElement("p", { className: "text-xs text-slate-500 line-clamp-2 leading-relaxed" }, course.description || "No course description provided."), /* @__PURE__ */ import_react25.default.createElement("div", { className: "grid grid-cols-3 gap-2 py-2 border-y border-slate-100 text-center text-xs" }, /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("div", { className: "font-bold text-slate-800" }, course.modules_count || 0), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[9px] text-slate-400 uppercase" }, "Modules")), /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("div", { className: "font-bold text-slate-800" }, course.lessons_count || 0), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[9px] text-slate-400 uppercase" }, "Lessons")), /* @__PURE__ */ import_react25.default.createElement("div", null, /* @__PURE__ */ import_react25.default.createElement("div", { className: "font-bold text-slate-800" }, course.estimated_duration_minutes || 30, "m"), /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-[9px] text-slate-400 uppercase" }, "Duration"))))),
+      /* @__PURE__ */ import_react25.default.createElement("div", { className: "p-3 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-2" }, /* @__PURE__ */ import_react25.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => handleOpenPreview(course),
+          className: "p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl text-xs font-semibold transition",
+          title: "Learner Preview Mode"
+        },
+        /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z" }), /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" }))
+      ), !isReadOnly && /* @__PURE__ */ import_react25.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => handleOpenEdit(course),
+          className: "p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 rounded-xl text-xs font-semibold transition",
+          title: "Edit Course Properties"
+        },
+        /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" }))
+      ), /* @__PURE__ */ import_react25.default.createElement(
+        "button",
+        {
+          type: "button",
+          onClick: () => setActiveStudioCourseId(course.id),
+          className: "flex-1 py-1.5 px-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-xs shadow-sm transition flex items-center justify-center gap-1.5"
+        },
+        /* @__PURE__ */ import_react25.default.createElement("span", null, "Curriculum Studio"),
+        /* @__PURE__ */ import_react25.default.createElement("svg", { className: "w-3.5 h-3.5", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react25.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 5l7 7-7 7" }))
+      ))
+    ))), totalPages > 1 && /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl text-xs" }, /* @__PURE__ */ import_react25.default.createElement("div", { className: "text-slate-500" }, "Showing ", (filters.page - 1) * filters.pageSize + 1, " to ", Math.min(filters.page * filters.pageSize, totalCount), " of ", totalCount, " courses"), /* @__PURE__ */ import_react25.default.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ import_react25.default.createElement(
+      "button",
+      {
+        type: "button",
+        disabled: filters.page === 1,
+        onClick: () => setFilters({ ...filters, page: filters.page - 1 }),
+        className: "px-3 py-1.5 rounded-xl border border-slate-200 disabled:opacity-30 font-semibold hover:bg-slate-50 transition"
+      },
+      "Previous"
+    ), /* @__PURE__ */ import_react25.default.createElement("span", { className: "font-bold text-slate-700" }, filters.page, " / ", totalPages), /* @__PURE__ */ import_react25.default.createElement(
+      "button",
+      {
+        type: "button",
+        disabled: filters.page >= totalPages,
+        onClick: () => setFilters({ ...filters, page: filters.page + 1 }),
+        className: "px-3 py-1.5 rounded-xl border border-slate-200 disabled:opacity-30 font-semibold hover:bg-slate-50 transition"
+      },
+      "Next"
+    )))), isCreateModalOpen && /* @__PURE__ */ import_react25.default.createElement(
+      CreateCourseModal,
+      {
+        isOpen: isCreateModalOpen,
+        onClose: () => setIsCreateModalOpen(false),
+        onSubmit: handleCreateCourse,
+        existingCategories: categories
+      }
+    ), isEditModalOpen && /* @__PURE__ */ import_react25.default.createElement(
+      EditCourseModal,
+      {
+        isOpen: isEditModalOpen,
+        onClose: () => setIsEditModalOpen(false),
+        course: editingCourse,
+        onSubmit: handleUpdateCourse,
+        existingCategories: categories
+      }
+    ), isPreviewModalOpen && /* @__PURE__ */ import_react25.default.createElement(
+      CoursePreviewModal,
+      {
+        isOpen: isPreviewModalOpen,
+        onClose: () => setIsPreviewModalOpen(false),
+        course: previewCourse
+      }
     ));
   };
 
   // src/pages/PlaceholderPage.tsx
-  var import_react14 = __toESM(require_react());
+  var import_react26 = __toESM(require_react());
   var PlaceholderPage = ({
     title,
     subtitle,
@@ -34476,14 +38448,14 @@ ${suffix}`;
     features,
     onNavigate
   }) => {
-    return /* @__PURE__ */ import_react14.default.createElement("div", { className: "space-y-6 animate-fade-in font-sans" }, /* @__PURE__ */ import_react14.default.createElement("div", { className: "bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-12 shadow-sm text-center max-w-2xl mx-auto space-y-6" }, /* @__PURE__ */ import_react14.default.createElement("div", { className: "w-16 h-16 rounded-3xl bg-orange-50 text-orange-600 border border-orange-200/60 mx-auto flex items-center justify-center shadow-sm" }, icon), /* @__PURE__ */ import_react14.default.createElement("div", null, /* @__PURE__ */ import_react14.default.createElement("div", { className: "inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider mb-2" }, /* @__PURE__ */ import_react14.default.createElement("span", { className: "w-2 h-2 rounded-full bg-orange-500" }), "Phase 1 Staging \u2022 Ready for Phase 2 Deployment"), /* @__PURE__ */ import_react14.default.createElement("h2", { className: "text-2xl font-black text-slate-900 tracking-tight sm:text-3xl" }, title), /* @__PURE__ */ import_react14.default.createElement("p", { className: "text-xs sm:text-sm text-slate-500 mt-2 max-w-md mx-auto leading-relaxed" }, subtitle)), /* @__PURE__ */ import_react14.default.createElement("div", { className: "text-left bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3" }, /* @__PURE__ */ import_react14.default.createElement("div", { className: "text-xs font-bold uppercase tracking-wider text-slate-500" }, "Target Supabase PostgreSQL Tables"), /* @__PURE__ */ import_react14.default.createElement("div", { className: "flex flex-wrap gap-2" }, tables.map((t) => /* @__PURE__ */ import_react14.default.createElement("span", { key: t, className: "px-2.5 py-1 rounded-lg bg-white border border-slate-200 font-mono text-xs font-semibold text-slate-800 shadow-2xs" }, "public.", t))), /* @__PURE__ */ import_react14.default.createElement("div", { className: "pt-2 border-t border-slate-200/60" }, /* @__PURE__ */ import_react14.default.createElement("div", { className: "text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5" }, "Scheduled Capabilities in Phase 2"), /* @__PURE__ */ import_react14.default.createElement("ul", { className: "text-xs text-slate-600 space-y-1" }, features.map((f, i) => /* @__PURE__ */ import_react14.default.createElement("li", { key: i, className: "flex items-center gap-2" }, /* @__PURE__ */ import_react14.default.createElement("svg", { className: "w-3.5 h-3.5 text-emerald-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react14.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" })), /* @__PURE__ */ import_react14.default.createElement("span", null, f)))))), /* @__PURE__ */ import_react14.default.createElement("div", { className: "flex items-center justify-center gap-3" }, /* @__PURE__ */ import_react14.default.createElement(
+    return /* @__PURE__ */ import_react26.default.createElement("div", { className: "space-y-6 animate-fade-in font-sans" }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-12 shadow-sm text-center max-w-2xl mx-auto space-y-6" }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "w-16 h-16 rounded-3xl bg-orange-50 text-orange-600 border border-orange-200/60 mx-auto flex items-center justify-center shadow-sm" }, icon), /* @__PURE__ */ import_react26.default.createElement("div", null, /* @__PURE__ */ import_react26.default.createElement("div", { className: "inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider mb-2" }, /* @__PURE__ */ import_react26.default.createElement("span", { className: "w-2 h-2 rounded-full bg-orange-500" }), "Phase 1 Staging \u2022 Ready for Phase 2 Deployment"), /* @__PURE__ */ import_react26.default.createElement("h2", { className: "text-2xl font-black text-slate-900 tracking-tight sm:text-3xl" }, title), /* @__PURE__ */ import_react26.default.createElement("p", { className: "text-xs sm:text-sm text-slate-500 mt-2 max-w-md mx-auto leading-relaxed" }, subtitle)), /* @__PURE__ */ import_react26.default.createElement("div", { className: "text-left bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3" }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "text-xs font-bold uppercase tracking-wider text-slate-500" }, "Target Supabase PostgreSQL Tables"), /* @__PURE__ */ import_react26.default.createElement("div", { className: "flex flex-wrap gap-2" }, tables.map((t) => /* @__PURE__ */ import_react26.default.createElement("span", { key: t, className: "px-2.5 py-1 rounded-lg bg-white border border-slate-200 font-mono text-xs font-semibold text-slate-800 shadow-2xs" }, "public.", t))), /* @__PURE__ */ import_react26.default.createElement("div", { className: "pt-2 border-t border-slate-200/60" }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5" }, "Scheduled Capabilities in Phase 2"), /* @__PURE__ */ import_react26.default.createElement("ul", { className: "text-xs text-slate-600 space-y-1" }, features.map((f, i) => /* @__PURE__ */ import_react26.default.createElement("li", { key: i, className: "flex items-center gap-2" }, /* @__PURE__ */ import_react26.default.createElement("svg", { className: "w-3.5 h-3.5 text-emerald-600 shrink-0", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react26.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" })), /* @__PURE__ */ import_react26.default.createElement("span", null, f)))))), /* @__PURE__ */ import_react26.default.createElement("div", { className: "flex items-center justify-center gap-3" }, /* @__PURE__ */ import_react26.default.createElement(
       "button",
       {
         onClick: () => onNavigate("/admin/dashboard"),
         className: "px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider transition shadow-sm"
       },
       "\u2190 Back to Dashboard"
-    ), /* @__PURE__ */ import_react14.default.createElement(
+    ), /* @__PURE__ */ import_react26.default.createElement(
       "button",
       {
         onClick: () => onNavigate("/admin/employees"),
@@ -34505,9 +38477,9 @@ ${suffix}`;
       }
       return "/admin/dashboard";
     };
-    const [currentRoute, setCurrentRoute] = (0, import_react15.useState)(getInitialRoute);
-    const [globalSearch, setGlobalSearch] = (0, import_react15.useState)("");
-    (0, import_react15.useEffect)(() => {
+    const [currentRoute, setCurrentRoute] = (0, import_react27.useState)(getInitialRoute);
+    const [globalSearch, setGlobalSearch] = (0, import_react27.useState)("");
+    (0, import_react27.useEffect)(() => {
       if (typeof window !== "undefined") {
         window.location.hash = currentRoute;
       }
@@ -34516,10 +38488,10 @@ ${suffix}`;
       setCurrentRoute(route);
     };
     if (isLoading) {
-      return /* @__PURE__ */ import_react15.default.createElement("div", { className: "min-h-screen bg-[#071322] flex items-center justify-center font-sans" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "text-center space-y-4" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-xl shadow-xl shadow-orange-950/60 mx-auto animate-bounce" }, "SK"), /* @__PURE__ */ import_react15.default.createElement("div", { className: "text-white font-bold text-sm tracking-wide" }, "SkillUp LMS \u2022 Rupeek"), /* @__PURE__ */ import_react15.default.createElement("div", { className: "flex items-center justify-center gap-1.5 text-xs text-orange-400" }, /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-4 h-4 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react15.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react15.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react15.default.createElement("span", null, "Verifying Admin Authorization..."))));
+      return /* @__PURE__ */ import_react27.default.createElement("div", { className: "min-h-screen bg-[#071322] flex items-center justify-center font-sans" }, /* @__PURE__ */ import_react27.default.createElement("div", { className: "text-center space-y-4" }, /* @__PURE__ */ import_react27.default.createElement("div", { className: "w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 text-white flex items-center justify-center font-black text-xl shadow-xl shadow-orange-950/60 mx-auto animate-bounce" }, "SK"), /* @__PURE__ */ import_react27.default.createElement("div", { className: "text-white font-bold text-sm tracking-wide" }, "SkillUp LMS \u2022 Rupeek"), /* @__PURE__ */ import_react27.default.createElement("div", { className: "flex items-center justify-center gap-1.5 text-xs text-orange-400" }, /* @__PURE__ */ import_react27.default.createElement("svg", { className: "w-4 h-4 animate-spin", fill: "none", viewBox: "0 0 24 24" }, /* @__PURE__ */ import_react27.default.createElement("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), /* @__PURE__ */ import_react27.default.createElement("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8v8H4z" })), /* @__PURE__ */ import_react27.default.createElement("span", null, "Verifying Admin Authorization..."))));
     }
     if (!isAuthenticated) {
-      return /* @__PURE__ */ import_react15.default.createElement(
+      return /* @__PURE__ */ import_react27.default.createElement(
         LoginPage,
         {
           onLoginSuccess: () => setCurrentRoute("/admin/dashboard")
@@ -34566,7 +38538,7 @@ ${suffix}`;
       }
     };
     const { title, subtitle } = getPageInfo();
-    return /* @__PURE__ */ import_react15.default.createElement(
+    return /* @__PURE__ */ import_react27.default.createElement(
       AdminLayout,
       {
         currentRoute,
@@ -34576,32 +38548,16 @@ ${suffix}`;
         onSearchChange: currentRoute === "/admin/employees" ? setGlobalSearch : void 0,
         searchValue: globalSearch
       },
-      currentRoute === "/admin/dashboard" && /* @__PURE__ */ import_react15.default.createElement(DashboardPage, { onNavigate: handleNavigate }),
-      currentRoute === "/admin/employees" && /* @__PURE__ */ import_react15.default.createElement(EmployeesPage, { initialSearch: globalSearch }),
-      currentRoute === "/admin/courses" && /* @__PURE__ */ import_react15.default.createElement(
-        PlaceholderPage,
-        {
-          title: "Course Management System",
-          subtitle: "Full curriculum management module with course authoring, modules, lessons, and quiz builders.",
-          moduleName: "courses",
-          icon: /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react15.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" })),
-          tables: ["courses", "modules", "lessons", "quizzes", "quiz_questions", "quiz_options"],
-          features: [
-            "Create, edit, and organize multi-module course curricula",
-            "Rich lesson content with video, markdown, and appraisal guides",
-            "Interactive evaluation quizzes with passing threshold criteria",
-            "Course activation and deactivation controls"
-          ],
-          onNavigate: handleNavigate
-        }
-      ),
-      currentRoute === "/admin/assignments" && /* @__PURE__ */ import_react15.default.createElement(
+      currentRoute === "/admin/dashboard" && /* @__PURE__ */ import_react27.default.createElement(DashboardPage, { onNavigate: handleNavigate }),
+      currentRoute === "/admin/employees" && /* @__PURE__ */ import_react27.default.createElement(EmployeesPage, { initialSearch: globalSearch }),
+      currentRoute === "/admin/courses" && /* @__PURE__ */ import_react27.default.createElement(CoursesPage, null),
+      currentRoute === "/admin/assignments" && /* @__PURE__ */ import_react27.default.createElement(
         PlaceholderPage,
         {
           title: "Course Assignment Engine",
           subtitle: "Assign mandatory and elective learning paths to individuals, operating locations, and roles.",
           moduleName: "assignments",
-          icon: /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react15.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" })),
+          icon: /* @__PURE__ */ import_react27.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react27.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" })),
           tables: ["course_assignments", "course_completions", "lesson_progress"],
           features: [
             "Individual employee assignment with target completion deadlines",
@@ -34612,13 +38568,13 @@ ${suffix}`;
           onNavigate: handleNavigate
         }
       ),
-      currentRoute === "/admin/reports" && /* @__PURE__ */ import_react15.default.createElement(
+      currentRoute === "/admin/reports" && /* @__PURE__ */ import_react27.default.createElement(
         PlaceholderPage,
         {
           title: "Executive Reporting & Analytics",
           subtitle: "Comprehensive training metrics, regional completion leaderboards, and audit compliance exports.",
           moduleName: "reports",
-          icon: /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react15.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" })),
+          icon: /* @__PURE__ */ import_react27.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react27.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" })),
           tables: ["course_completions", "quiz_attempts", "audit_logs", "employees"],
           features: [
             "City-wise and designation-wise completion percentage heatmaps",
@@ -34629,13 +38585,13 @@ ${suffix}`;
           onNavigate: handleNavigate
         }
       ),
-      currentRoute === "/admin/admins" && (isSuperAdmin ? /* @__PURE__ */ import_react15.default.createElement(
+      currentRoute === "/admin/admins" && (isSuperAdmin ? /* @__PURE__ */ import_react27.default.createElement(
         PlaceholderPage,
         {
           title: "Administrator Management",
           subtitle: "Access control for L&D Administrators, Content Admins, and Reporting Managers.",
           moduleName: "admins",
-          icon: /* @__PURE__ */ import_react15.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react15.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" })),
+          icon: /* @__PURE__ */ import_react27.default.createElement("svg", { className: "w-8 h-8", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor" }, /* @__PURE__ */ import_react27.default.createElement("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" })),
           tables: ["admin_users", "audit_logs"],
           features: [
             "Add and invite new administrative team members",
@@ -34645,11 +38601,11 @@ ${suffix}`;
           ],
           onNavigate: handleNavigate
         }
-      ) : /* @__PURE__ */ import_react15.default.createElement("div", { className: "p-8 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2" }, /* @__PURE__ */ import_react15.default.createElement("div", { className: "font-bold text-rose-800 text-base" }, "Access Restricted"), /* @__PURE__ */ import_react15.default.createElement("p", { className: "text-xs text-rose-600" }, "Admin Management is only accessible to users with the SUPER_ADMIN role.")))
+      ) : /* @__PURE__ */ import_react27.default.createElement("div", { className: "p-8 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2" }, /* @__PURE__ */ import_react27.default.createElement("div", { className: "font-bold text-rose-800 text-base" }, "Access Restricted"), /* @__PURE__ */ import_react27.default.createElement("p", { className: "text-xs text-rose-600" }, "Admin Management is only accessible to users with the SUPER_ADMIN role.")))
     );
   };
   var App = () => {
-    return /* @__PURE__ */ import_react15.default.createElement(AuthProvider, null, /* @__PURE__ */ import_react15.default.createElement(ToastProvider, null, /* @__PURE__ */ import_react15.default.createElement(MainRouter, null)));
+    return /* @__PURE__ */ import_react27.default.createElement(AuthProvider, null, /* @__PURE__ */ import_react27.default.createElement(ToastProvider, null, /* @__PURE__ */ import_react27.default.createElement(MainRouter, null)));
   };
 
   // src/main.tsx
@@ -34657,7 +38613,7 @@ ${suffix}`;
   if (container) {
     const root = import_client.default.createRoot(container);
     root.render(
-      /* @__PURE__ */ import_react16.default.createElement(import_react16.default.StrictMode, null, /* @__PURE__ */ import_react16.default.createElement(App, null))
+      /* @__PURE__ */ import_react28.default.createElement(import_react28.default.StrictMode, null, /* @__PURE__ */ import_react28.default.createElement(App, null))
     );
   }
 })();
