@@ -65,6 +65,7 @@ export const CoursePreviewModal: React.FC<CoursePreviewModalProps> = ({
         correctCount++;
       }
     });
+    if (selectedQuiz.questions.length === 0) return 0;
     return Math.round((correctCount / selectedQuiz.questions.length) * 100);
   };
 
@@ -219,7 +220,7 @@ export const CoursePreviewModal: React.FC<CoursePreviewModalProps> = ({
                       {course.difficulty || 'Intermediate'}
                     </span>
                     <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                      {course.is_active ? 'PUBLISHED' : 'DRAFT'}
+                      {course.status || 'DRAFT'}
                     </span>
                   </div>
                   <h2 className="text-xl font-bold text-slate-900">{course.title}</h2>

@@ -18,7 +18,6 @@ export const EditCourseModal: React.FC<EditCourseModalProps> = ({
   existingCategories
 }) => {
   const [title, setTitle] = useState('');
-  const [code, setCode] = useState('');
   const [category, setCategory] = useState('');
   const [customCategory, setCustomCategory] = useState('');
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -32,7 +31,6 @@ export const EditCourseModal: React.FC<EditCourseModalProps> = ({
   useEffect(() => {
     if (course) {
       setTitle(course.title || '');
-      setCode(course.code || '');
       setCategory(course.category || 'General');
       setDifficulty(course.difficulty || 'Intermediate');
       setDurationMinutes(course.estimated_duration_minutes || 30);
@@ -67,7 +65,6 @@ export const EditCourseModal: React.FC<EditCourseModalProps> = ({
     try {
       await onSubmit({
         title: cleanTitle,
-        code: code.trim() || undefined,
         category: finalCategory,
         difficulty,
         estimated_duration_minutes: durationMinutes > 0 ? durationMinutes : 30,
@@ -114,18 +111,6 @@ export const EditCourseModal: React.FC<EditCourseModalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
-              Course Code (Optional)
-            </label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-mono outline-none transition"
-            />
-          </div>
-
           <div>
             <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
               Difficulty Level

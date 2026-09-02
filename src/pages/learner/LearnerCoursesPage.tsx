@@ -117,11 +117,12 @@ export const LearnerCoursesPage: React.FC<LearnerCoursesPageProps> = ({ onNaviga
             Overdue
           </span>
         );
+      case 'ASSIGNED':
       default:
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            Not Started
+            Assigned
           </span>
         );
     }

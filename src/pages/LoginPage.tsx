@@ -13,7 +13,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [targetPortal, setTargetPortal] = useState<'AUTO' | 'EMPLOYEE' | 'ADMIN'>('AUTO');
-  const { login, isLoading, error, accessDeniedReason } = useAuth();
+  // TEMP DIAGNOSTIC — adminAuthDiagnostic comes from AuthContext (set inside
+  // checkUserAuthorization itself), not from a local submit-handler read, so
+  // it's captured reliably regardless of which invocation of
+  // checkUserAuthorization (login()'s direct call, or the
+  // onAuthStateChange('SIGNED_IN') listener triggered by the same sign-in)
+  // actually produced it. Remove this once the admin_users issue is resolved.
+  const { login, isLoading, error, accessDeniedReason, adminAuthDiagnostic } = useAuth();
   const { showSuccess, showError } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,6 +94,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div className="font-medium leading-relaxed">{accessDeniedReason || error}</div>
+            </div>
+          )}
+
+          {/* TEMP DIAGNOSTIC BOX — admin_users authorization diagnosis. Remove
+              this entire block once the current login issue is resolved. */}
+          {adminAuthDiagnostic && (
+            <div className="mb-5 p-3.5 rounded-xl bg-amber-950/60 border border-amber-700/50 text-amber-100 text-[11px] font-mono leading-relaxed space-y-1">
+              <div className="font-bold uppercase tracking-wider text-amber-300 text-[10px] mb-1">
+                TEMP DIAGNOSTIC — admin_users query
+              </div>
+              <div>Admin query status: <span className="font-bold">{adminAuthDiagnostic.status}</span></div>
+              {adminAuthDiagnostic.authUserId && <div>Auth user UUID queried: {adminAuthDiagnostic.authUserId}</div>}
+              {adminAuthDiagnostic.errorCode !== undefined && adminAuthDiagnostic.errorCode !== null && (
+                <div>Error code: {adminAuthDiagnostic.errorCode}</div>
+              )}
+              {adminAuthDiagnostic.errorMessage && <div>Error message: {adminAuthDiagnostic.errorMessage}</div>}
+              {adminAuthDiagnostic.errorDetails && <div>Error details: {adminAuthDiagnostic.errorDetails}</div>}
+              {adminAuthDiagnostic.errorHint && <div>Error hint: {adminAuthDiagnostic.errorHint}</div>}
             </div>
           )}
 

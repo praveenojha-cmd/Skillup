@@ -186,7 +186,7 @@ export const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({
               <option value={0}>Select Designation...</option>
               {roles.map((r) => (
                 <option key={r.id} value={Number(r.id)}>
-                  {r.name} {r.department ? `(${r.department})` : ''}
+                  {r.name} {r.description ? `(${r.description})` : ''}
                 </option>
               ))}
             </select>

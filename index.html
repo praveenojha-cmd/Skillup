@@ -5,7 +5,10 @@
     <meta http-equiv="refresh" content="0; url=admin-portal/index.html">
     <title>Redirecting to SkillUp Admin Portal...</title>
     <script>
-        window.location.href = "admin-portal/index.html";
+        // Preserve any URL hash (e.g. a Supabase Auth recovery/signup token
+        // delivered as #access_token=...&type=recovery&...) when redirecting,
+        // so it isn't silently discarded before the app can process it.
+        window.location.href = "admin-portal/index.html" + window.location.hash;
     </script>
 </head>
 <body style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0A2540; color: #FFFFFF;">

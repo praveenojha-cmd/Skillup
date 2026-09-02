@@ -345,7 +345,7 @@ export const LearnerCurriculumPlayerPage: React.FC<LearnerCurriculumPlayerPagePr
                 <p className="text-[11px] text-slate-400">{modules.length} Modules &bull; {learnerQuizzes.length} Quizzes</p>
               </div>
               <span className="text-xs font-black text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
-                {assignment.progress_percentage}% Done
+                {assignment.progress_percentage || 0}% Done
               </span>
             </div>
 
@@ -565,9 +565,9 @@ export const LearnerCurriculumPlayerPage: React.FC<LearnerCurriculumPlayerPagePr
                   {activeItem.lesson.description && (
                     <p className="text-slate-300 font-medium">{activeItem.lesson.description}</p>
                   )}
-                  {activeItem.lesson.content_body ? (
+                  {activeItem.lesson.content_text ? (
                     <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 whitespace-pre-wrap font-sans text-xs sm:text-sm text-slate-200">
-                      {activeItem.lesson.content_body}
+                      {activeItem.lesson.content_text}
                     </div>
                   ) : !activeItem.lesson.content_url && (
                     <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400 text-center">

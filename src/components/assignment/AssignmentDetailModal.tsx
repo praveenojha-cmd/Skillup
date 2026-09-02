@@ -31,8 +31,9 @@ export const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
         return <span className="px-2.5 py-1 rounded-md bg-rose-100 text-rose-800 font-bold text-xs">OVERDUE</span>;
       case 'REVOKED':
         return <span className="px-2.5 py-1 rounded-md bg-slate-200 text-slate-700 font-bold text-xs">REVOKED</span>;
+      case 'ASSIGNED':
       default:
-        return <span className="px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 font-bold text-xs">NOT_STARTED</span>;
+        return <span className="px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 font-bold text-xs">ASSIGNED</span>;
     }
   };
 

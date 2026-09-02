@@ -79,11 +79,12 @@ export const LearnerDashboardPage: React.FC<LearnerDashboardPageProps> = ({ onNa
             Overdue
           </span>
         );
+      case 'ASSIGNED':
       default:
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
             <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-            Not Started
+            Assigned
           </span>
         );
     }
@@ -284,12 +285,12 @@ export const LearnerDashboardPage: React.FC<LearnerDashboardPageProps> = ({ onNa
                   <div>
                     <div className="flex items-center justify-between text-xs mb-1.5">
                       <span className="text-slate-400 font-medium">Progress</span>
-                      <span className="font-bold text-white">{assignment.progress_percentage}%</span>
+                      <span className="font-bold text-white">{assignment.progress_percentage || 0}%</span>
                     </div>
                     <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full transition-all duration-500"
-                        style={{ width: `${Math.max(5, assignment.progress_percentage)}%` }}
+                        style={{ width: `${Math.max(5, assignment.progress_percentage || 0)}%` }}
                       />
                     </div>
                   </div>
@@ -449,16 +450,16 @@ export const LearnerDashboardPage: React.FC<LearnerDashboardPageProps> = ({ onNa
 
                 {/* Progress bar & Action button footer */}
                 <div className="p-5 pt-3 border-t border-slate-800/80 bg-slate-900/40 space-y-3">
-                  {assignment.status !== 'NOT_STARTED' && (
+                  {assignment.status !== 'ASSIGNED' && (
                     <div>
                       <div className="flex items-center justify-between text-[11px] mb-1">
                         <span className="text-slate-400">Progress</span>
-                        <span className="font-bold text-white">{assignment.progress_percentage}%</span>
+                        <span className="font-bold text-white">{assignment.progress_percentage || 0}%</span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-orange-500 rounded-full"
-                          style={{ width: `${assignment.progress_percentage}%` }}
+                          style={{ width: `${assignment.progress_percentage || 0}%` }}
                         />
                       </div>
                     </div>

@@ -421,7 +421,7 @@ export const AssignCourseModal: React.FC<AssignCourseModalProps> = ({
                   <div>
                     <span className="text-slate-400 block text-[10px] uppercase font-bold">Initial Assignment Status</span>
                     <span className="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-800 mt-0.5">
-                      NOT_STARTED (0%)
+                      ASSIGNED (0%)
                     </span>
                   </div>
                 </div>

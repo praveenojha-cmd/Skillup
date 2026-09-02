@@ -8,7 +8,8 @@ import { CourseStudio } from '../components/course/CourseStudio';
 import { useAuth } from '../context/AuthContext';
 
 export const CoursesPage: React.FC = () => {
-  const { role } = useAuth();
+  const { adminProfile } = useAuth();
+  const role = adminProfile?.role;
   const [courses, setCourses] = useState<Course[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [categories, setCategories] = useState<string[]>([]);
@@ -104,7 +105,7 @@ export const CoursesPage: React.FC = () => {
 
   const handleTogglePublish = async (course: Course) => {
     try {
-      const willPublish = !course.is_active;
+      const willPublish = course.status !== 'PUBLISHED';
       await toggleCoursePublish(course.id, willPublish, course);
       showNotification(
         willPublish
@@ -131,8 +132,8 @@ export const CoursesPage: React.FC = () => {
     );
   }
 
-  const publishedCount = courses.filter(c => c.is_active).length;
-  const draftCount = courses.filter(c => !c.is_active).length;
+  const publishedCount = courses.filter(c => c.status === 'PUBLISHED').length;
+  const draftCount = courses.filter(c => c.status !== 'PUBLISHED').length;
   const totalPages = Math.ceil(totalCount / filters.pageSize) || 1;
 
   return (
@@ -178,7 +179,12 @@ export const CoursesPage: React.FC = () => {
               </svg>
               <span className="font-semibold">{error}</span>
             </div>
-            <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700 font-bold text-xs">✕</button>
+            <div className="flex items-center gap-3 shrink-0">
+              <button onClick={loadData} className="px-3 py-1 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 transition">
+                Retry
+              </button>
+              <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700 font-bold text-xs">✕</button>
+            </div>
           </div>
         )}
 
@@ -229,7 +235,7 @@ export const CoursesPage: React.FC = () => {
                 type="text"
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
-                placeholder="Search courses by title, description, code..."
+                placeholder="Search courses by title, description..."
                 className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-xs font-medium outline-none transition"
               />
               {filters.search && (
@@ -300,6 +306,11 @@ export const CoursesPage: React.FC = () => {
           </svg>
           <div className="text-xs font-semibold text-slate-600">Querying public.courses...</div>
         </div>
+      ) : error ? (
+        /* A failed query is a distinct state from a legitimate zero-row
+           result — the error banner above already carries the message and
+           Retry action, so avoid also claiming "no courses created yet". */
+        null
       ) : courses.length === 0 ? (
         /* Explicit Empty State Mandate */
         <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 space-y-3">
@@ -352,12 +363,12 @@ export const CoursesPage: React.FC = () => {
                     {/* Status Badge */}
                     <div className="absolute top-2.5 right-2.5">
                       <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] shadow-sm flex items-center gap-1 ${
-                        course.is_active
+                        course.status === 'PUBLISHED'
                           ? 'bg-emerald-600 text-white'
                           : 'bg-amber-600 text-white'
                       }`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                        <span>{course.is_active ? 'PUBLISHED' : 'DRAFT'}</span>
+                        <span>{course.status || 'DRAFT'}</span>
                       </span>
                     </div>
 

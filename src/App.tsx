@@ -4,6 +4,7 @@ import { ToastProvider } from './context/ToastContext';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { LearnerLayout } from './components/layout/LearnerLayout';
 import { LoginPage } from './pages/LoginPage';
+import { UpdatePasswordPage } from './pages/UpdatePasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { CoursesPage } from './pages/CoursesPage';
@@ -20,15 +21,43 @@ import { LearnerProfilePage } from './pages/learner/LearnerProfilePage';
 
 import { AppRoute } from './types/auth';
 
+/**
+ * Detects whether a URL hash carries a Supabase Auth payload (recovery/
+ * signup/invite/magic-link tokens, or an auth error) rather than one of
+ * this app's own routes (which always start with `/`). The hash-based
+ * router below must never read such a payload as a route, and must never
+ * overwrite it, so that supabase-js's own `detectSessionInUrl` handling
+ * gets an unmolested chance to consume it.
+ */
+const isSupabaseAuthHash = (hash: string): boolean => {
+  if (!hash) return false;
+  return (
+    hash.includes('access_token=') ||
+    hash.includes('refresh_token=') ||
+    hash.includes('type=recovery') ||
+    hash.includes('type=signup') ||
+    hash.includes('type=invite') ||
+    hash.includes('type=magiclink') ||
+    hash.includes('error_description=')
+  );
+};
+
 const MainRouter: React.FC = () => {
-  const { isAuthenticated, isLoading, isSuperAdmin, activePortal, setActivePortal, employeeProfile, adminProfile } = useAuth();
-  
-  // URL Hash or state-based routing
+  const { isAuthenticated, isLoading, isSuperAdmin, activePortal, setActivePortal, employeeProfile, adminProfile, isPasswordRecovery } = useAuth();
+
+  // URL Hash or state-based routing. Only a hash matching one of this app's
+  // own route prefixes (/admin, /learn) is honored — a bare hash (e.g. a
+  // fresh load of the base URL, where window.location.pathname is something
+  // like "/admin-portal/", not an app route) falls through to the default
+  // dashboard for the active portal instead of rendering that raw path.
   const getInitialRoute = (): string => {
     if (typeof window !== 'undefined') {
-      const path = window.location.hash.replace('#', '') || window.location.pathname;
-      if (path && path !== '/' && path !== '') {
-        return path;
+      const rawHash = window.location.hash;
+      if (!isSupabaseAuthHash(rawHash)) {
+        const path = rawHash.replace('#', '');
+        if (path && (path.startsWith('/admin') || path.startsWith('/learn'))) {
+          return path;
+        }
       }
     }
     return activePortal === 'ADMIN' ? '/admin/dashboard' : '/learn/dashboard';
@@ -49,7 +78,7 @@ const MainRouter: React.FC = () => {
   }, [activePortal, isAuthenticated]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isSupabaseAuthHash(window.location.hash)) {
       window.location.hash = currentRoute;
     }
   }, [currentRoute]);
@@ -77,6 +106,14 @@ const MainRouter: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  // A password-recovery session must always route here first — before the
+  // normal authenticated/unauthenticated branches — so a recovery link can
+  // never accidentally land the user straight in the Admin Dashboard
+  // without setting a new password.
+  if (isPasswordRecovery) {
+    return <UpdatePasswordPage />;
   }
 
   // If not authenticated, render the enterprise login screen
@@ -183,6 +220,12 @@ const MainRouter: React.FC = () => {
 
   const { title, subtitle } = getPageInfo();
 
+  // Any admin-portal route that isn't one of the recognized pages (e.g. the
+  // raw "/admin-portal/" base path) falls back to the Dashboard rather than
+  // rendering blank content.
+  const knownAdminRoutes = ['/admin/dashboard', '/admin/employees', '/admin/courses', '/admin/assignments', '/admin/reports', '/admin/admins'];
+  const isUnmatchedAdminRoute = !knownAdminRoutes.includes(currentRoute);
+
   return (
     <AdminLayout
       currentRoute={currentRoute as AppRoute}
@@ -192,7 +235,7 @@ const MainRouter: React.FC = () => {
       onSearchChange={currentRoute === '/admin/employees' ? setGlobalSearch : undefined}
       searchValue={globalSearch}
     >
-      {currentRoute === '/admin/dashboard' && (
+      {(currentRoute === '/admin/dashboard' || isUnmatchedAdminRoute) && (
         <DashboardPage onNavigate={(r) => handleNavigate(r)} />
       )}
 

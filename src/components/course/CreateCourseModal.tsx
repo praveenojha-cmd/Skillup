@@ -27,7 +27,6 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({
   existingCategories
 }) => {
   const [title, setTitle] = useState('');
-  const [code, setCode] = useState('');
   const [category, setCategory] = useState('Gold Loan Product Knowledge');
   const [customCategory, setCustomCategory] = useState('');
   const [isCustomCategory, setIsCustomCategory] = useState(false);
@@ -60,18 +59,15 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({
     try {
       await onSubmit({
         title: cleanTitle,
-        code: code.trim() || undefined,
         category: finalCategory,
         difficulty,
         estimated_duration_minutes: durationMinutes > 0 ? durationMinutes : 30,
         description: description.trim() || undefined,
         thumbnail_url: thumbnailUrl.trim() || undefined,
-        is_active: false,
         status: 'DRAFT'
       });
       // Reset form
       setTitle('');
-      setCode('');
       setDescription('');
       setThumbnailUrl('');
       setDurationMinutes(30);
@@ -116,19 +112,6 @@ export const CreateCourseModal: React.FC<CreateCourseModalProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
-              Course Code / Identifier (Optional)
-            </label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="e.g., GL-VAL-101"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 text-slate-800 font-mono placeholder:text-slate-400 outline-none transition"
-            />
-          </div>
-
           <div>
             <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
               Target Difficulty Level

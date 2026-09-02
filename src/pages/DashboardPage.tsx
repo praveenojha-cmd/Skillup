@@ -29,6 +29,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
     async function loadData() {
       setIsLoading(true);
       setError(null);
+      setStats(null);
       try {
         const [statsData, locData, rolesData, cityData, roleData] = await Promise.all([
           fetchDashboardStats(),

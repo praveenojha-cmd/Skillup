@@ -32,6 +32,7 @@ export const AssignmentsPage: React.FC = () => {
   const [assignments, setAssignments] = useState<CourseAssignment[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
@@ -86,6 +87,7 @@ export const AssignmentsPage: React.FC = () => {
   // Fetch Assignments & Stats
   const loadAssignments = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const [assignRes, statsRes] = await Promise.all([
         fetchCourseAssignments({
@@ -106,6 +108,9 @@ export const AssignmentsPage: React.FC = () => {
       setStats(statsRes);
     } catch (err: any) {
       console.error('Error fetching assignments:', err);
+      setAssignments([]);
+      setTotalCount(0);
+      setError(err?.message || 'Failed to load assignments from Supabase.');
       showError('Failed to load assignments: ' + (err.message || 'Database error'));
     } finally {
       setLoading(false);
@@ -152,10 +157,11 @@ export const AssignmentsPage: React.FC = () => {
             REVOKED
           </span>
         );
+      case 'ASSIGNED':
       default:
         return (
           <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-            NOT_STARTED
+            ASSIGNED
           </span>
         );
     }
@@ -303,7 +309,7 @@ export const AssignmentsPage: React.FC = () => {
               className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="ALL">All Statuses</option>
-              <option value="NOT_STARTED">Not Started</option>
+              <option value="ASSIGNED">Assigned</option>
               <option value="IN_PROGRESS">In Progress</option>
               <option value="COMPLETED">Completed</option>
               <option value="OVERDUE">Overdue</option>
@@ -392,6 +398,25 @@ export const AssignmentsPage: React.FC = () => {
             </svg>
             <span className="text-xs font-semibold">Querying live course assignments...</span>
           </div>
+        ) : error ? (
+          <div className="p-12 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto shadow-inner">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Unable to Load Course Assignments</h3>
+              <p className="text-xs text-rose-500 max-w-sm mx-auto mt-1">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={loadAssignments}
+              className="px-4 py-2 bg-rose-600 text-white rounded-xl font-bold text-xs shadow-sm hover:bg-rose-700 transition"
+            >
+              Retry Query
+            </button>
+          </div>
         ) : assignments.length === 0 ? (
           <div className="p-12 text-center space-y-4">
             <div className="w-16 h-16 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center mx-auto shadow-inner">
@@ -402,8 +427,8 @@ export const AssignmentsPage: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-slate-900">No Course Assignments Found</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-                {totalCount === 0 
-                  ? 'There are currently 0 assignments in the system. Use the buttons above to assign published curriculum to employees.' 
+                {totalCount === 0
+                  ? 'There are currently 0 assignments in the system. Use the buttons above to assign published curriculum to employees.'
                   : 'No assignments match the selected filter criteria. Try resetting filters.'}
               </p>
             </div>
@@ -577,7 +602,7 @@ export const AssignmentsPage: React.FC = () => {
           <div className="p-4 border-t border-slate-200">
             <Pagination
               currentPage={page}
-              totalItems={totalCount}
+              totalCount={totalCount}
               pageSize={pageSize}
               onPageChange={setPage}
             />

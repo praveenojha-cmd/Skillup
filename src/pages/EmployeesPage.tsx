@@ -394,6 +394,24 @@ export const EmployeesPage: React.FC<EmployeesPageProps> = ({ initialSearch = ''
                     <td className="py-4 px-4 text-right"><div className="h-7 bg-slate-100 rounded-lg w-20 ml-auto" /></td>
                   </tr>
                 ))
+              ) : queryError ? (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-rose-600">
+                    <div className="max-w-xs mx-auto space-y-2">
+                      <svg className="w-8 h-8 text-rose-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="font-bold text-sm">Unable to Load Employees</div>
+                      <p className="text-xs text-rose-500">The Supabase query failed. See the error above and retry.</p>
+                      <button
+                        onClick={loadEmployees}
+                        className="mt-2 px-3 py-1.5 bg-rose-600 text-white rounded-xl font-semibold text-xs hover:bg-rose-700 transition"
+                      >
+                        Retry Query
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : employees.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-500">

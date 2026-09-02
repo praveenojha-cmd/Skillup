@@ -27,6 +27,7 @@ import {
   CourseAssignment,
   AssignmentFilters,
   AssignmentStats,
+  PersistedAssignmentStatus,
   CreateIndividualAssignmentInput,
   CreateBulkAssignmentInput,
   BulkAudienceFilters,
@@ -74,9 +75,39 @@ export function saveStoredSupabaseConfig(url: string, anonKey: string): void {
 let supabaseInstance: SupabaseClient | null = null;
 let currentConfig = getStoredSupabaseConfig();
 
+/**
+ * @supabase/supabase-js's PostgREST/Storage fetch path (unlike its Edge Functions fetch
+ * path) falls back to sending the configured key as `Authorization: Bearer <key>` whenever
+ * there is no active session — including for new-format `sb_publishable_...` keys, which
+ * are not JWTs and are only meant to be sent via the `apikey` header. Supabase's API
+ * gateway/PostgREST can reject such a request (401 / PostgREST 42501) because it tries to
+ * parse that Bearer value as a JWT for role resolution.
+ *
+ * This wrapper runs as `global.fetch` — i.e. after the SDK has already built the request
+ * headers (apikey + its Authorization fallback) — and strips the Authorization header ONLY
+ * when it is exactly that fallback duplicate for a `sb_publishable_...` key. A real,
+ * post-login session Authorization value never matches `Bearer <configuredKey>` verbatim,
+ * so it is always left untouched. `apikey` and every other header are never touched.
+ */
+function createAnonBearerFallbackStrippingFetch(configuredKey: string): typeof fetch {
+  const isNewPublishableKey = configuredKey.startsWith('sb_publishable_');
+  const fallbackAuthValue = `Bearer ${configuredKey}`;
+
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (isNewPublishableKey && init?.headers) {
+      const headers = new Headers(init.headers);
+      if (headers.get('Authorization') === fallbackAuthValue) {
+        headers.delete('Authorization');
+        init = { ...init, headers };
+      }
+    }
+    return fetch(input, init);
+  };
+}
+
 export function getSupabaseClient(): SupabaseClient {
   const config = getStoredSupabaseConfig();
-  
+
   if (!supabaseInstance || config.url !== currentConfig.url || config.anonKey !== currentConfig.anonKey) {
     currentConfig = config;
     if (config.url && config.anonKey) {
@@ -86,6 +117,9 @@ export function getSupabaseClient(): SupabaseClient {
           autoRefreshToken: true,
           detectSessionInUrl: true,
           storageKey: 'skillup_auth_token'
+        },
+        global: {
+          fetch: createAnonBearerFallbackStrippingFetch(config.anonKey)
         }
       });
     } else {
@@ -101,44 +135,70 @@ export function getSupabaseClient(): SupabaseClient {
 export const supabase = getSupabaseClient();
 
 /**
- * Checks if the Supabase client is configured and can reach the backend
+ * Checks whether the configured Supabase Project URL + publishable key can
+ * reach the backend — deliberately independent of `public.employees` and of
+ * any authenticated session.
+ *
+ * Uses a direct browser `fetch()` against GoTrue's public `/auth/v1/settings`
+ * endpoint rather than a PostgREST table query. That endpoint exists so a
+ * not-yet-authenticated login page can ask "which sign-in methods are
+ * enabled" before any session exists — it requires only the `apikey` header,
+ * never an `Authorization` header, never touches Postgres, and is unrelated
+ * to `public.employees`'s RLS/grants (which intentionally remain closed to
+ * `anon`). This never calls getSupabaseClient() and never creates another
+ * SupabaseClient — it is a plain fetch, so it cannot read/write the app's
+ * real `skillup_auth_token` session in any way.
  */
 export async function testSupabaseConnection(): Promise<{ ok: boolean; message: string; details?: any }> {
   try {
-    const client = getSupabaseClient();
     const config = getStoredSupabaseConfig();
-    
+
     if (!config.url || !config.anonKey || config.url.includes('placeholder')) {
       return {
         ok: false,
         message: 'Supabase URL or Anon Key is not configured yet.'
       };
     }
-    
-    // Test query against public.employees
-    const { count, error } = await client
-      .from('employees')
-      .select('*', { count: 'exact', head: true });
-    
-    if (error) {
-      // RLS policy active check
-      if (error.code === 'PGRST301' || error.message.includes('permission denied') || error.message.includes('JWT')) {
-        return {
-          ok: true,
-          message: 'Connected to Supabase. Row Level Security active.',
-          details: { rlsActive: true }
-        };
+
+    const settingsUrl = new URL('auth/v1/settings', config.url).toString();
+    const res = await fetch(settingsUrl, {
+      method: 'GET',
+      headers: {
+        apikey: config.anonKey
       }
+    });
+
+    if (res.ok) {
       return {
-        ok: false,
-        message: `Supabase error: ${error.message} (Code: ${error.code})`
+        ok: true,
+        message: `Successfully connected to Supabase (HTTP ${res.status}).`,
+        details: { status: res.status }
       };
     }
-    
+
+    const bodyText = await res.text().catch(() => '');
+    let code: string | undefined;
+    let apiMessage: string | undefined;
+    try {
+      const parsed = JSON.parse(bodyText);
+      code = parsed?.error_code || parsed?.code;
+      apiMessage = parsed?.msg || parsed?.message || parsed?.error_description || parsed?.error;
+    } catch {
+      // Body wasn't JSON — fall back to status/statusText/raw text below.
+    }
+
+    const statusPart = `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`;
+    const codePart = code ? ` (Code: ${code})` : '';
+    const messagePart = apiMessage
+      ? `: ${apiMessage}`
+      : bodyText
+        ? `: ${bodyText}`
+        : '';
+
     return {
-      ok: true,
-      message: `Successfully connected. Verified ${count ?? 0} employees in PostgreSQL.`,
-      details: { rowCount: count }
+      ok: false,
+      message: `Supabase error: ${statusPart}${codePart}${messagePart}`,
+      details: { status: res.status, code, apiMessage }
     };
   } catch (err: any) {
     return {
@@ -155,7 +215,7 @@ export async function fetchLocations(): Promise<Location[]> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('locations')
-    .select('id, name, city, state, code, created_at')
+    .select('id, name, city, state, country, is_active, created_at, updated_at')
     .order('name', { ascending: true });
 
   if (error) {
@@ -172,7 +232,7 @@ export async function fetchRoles(): Promise<Role[]> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('roles')
-    .select('id, name, department, level, created_at')
+    .select('id, name, description, is_active, created_at, updated_at')
     .order('name', { ascending: true });
 
   if (error) {
@@ -205,18 +265,17 @@ export async function fetchEmployees(filters: EmployeeFilters): Promise<{
     query = query.or(`employee_id.ilike.%${q}%,full_name.ilike.%${q}%,email.ilike.%${q}%,reporting_manager_name.ilike.%${q}%,reporting_manager_employee_id.ilike.%${q}%`);
   }
 
-  // Filter by location (ID or Name)
+  // Filter by location. locations.id (and employees.location_id) are uuid,
+  // not numeric, so the selected value is applied directly as-is — it is
+  // always the exact id chosen from the Location filter dropdown.
   if (location && location !== 'ALL') {
-    if (!isNaN(Number(location))) {
-      query = query.eq('location_id', Number(location));
-    }
+    query = query.eq('location_id', location);
   }
 
-  // Filter by role (ID or Name)
+  // Filter by role. roles.id (and employees.role_id) are uuid, not numeric,
+  // so the selected value is applied directly as-is.
   if (role && role !== 'ALL') {
-    if (!isNaN(Number(role))) {
-      query = query.eq('role_id', Number(role));
-    }
+    query = query.eq('role_id', role);
   }
 
   // Filter by employment_status enum ('ACTIVE' | 'INACTIVE')
@@ -260,14 +319,6 @@ export async function fetchEmployees(filters: EmployeeFilters): Promise<{
     role_name: row.roles?.name || (row.role_id ? `Role #${row.role_id}` : 'Unassigned'),
     location_name: row.locations?.city || row.locations?.name || (row.location_id ? `Location #${row.location_id}` : 'Unassigned')
   }));
-
-  // Fallback text match on location/role name if passed string instead of ID
-  if (location && location !== 'ALL' && isNaN(Number(location))) {
-    employees = employees.filter(e => e.location_name?.toLowerCase() === location.toLowerCase());
-  }
-  if (role && role !== 'ALL' && isNaN(Number(role))) {
-    employees = employees.filter(e => e.role_name?.toLowerCase() === role.toLowerCase());
-  }
 
   return {
     employees,
@@ -321,43 +372,37 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   }
 
   // 5. Total Courses count (SELECT COUNT(*) FROM public.courses)
-  let totalCourses = 0;
-  try {
-    const { count: cCount, error: cErr } = await client
-      .from('courses')
-      .select('*', { count: 'exact', head: true });
-    if (!cErr && cCount !== null) {
-      totalCourses = cCount;
-    }
-  } catch {
-    totalCourses = 0;
+  // A failed query must surface as an error, not silently read as 0 courses —
+  // matching the same throw-on-error behavior as the employee counts above.
+  const { count: cCount, error: cErr } = await client
+    .from('courses')
+    .select('*', { count: 'exact', head: true });
+
+  if (cErr) {
+    throw new Error(`Failed to query courses: ${cErr.message}`);
   }
 
   // 6. Course Assignments count (SELECT COUNT(*) FROM public.course_assignments)
-  let assignedCourses = 0;
-  try {
-    const { count: aCount, error: aErr } = await client
-      .from('course_assignments')
-      .select('*', { count: 'exact', head: true });
-    if (!aErr && aCount !== null) {
-      assignedCourses = aCount;
-    }
-  } catch {
-    assignedCourses = 0;
+  const { count: aCount, error: aErr } = await client
+    .from('course_assignments')
+    .select('*', { count: 'exact', head: true });
+
+  if (aErr) {
+    throw new Error(`Failed to query course assignments: ${aErr.message}`);
   }
 
   // 7. Course Completions count (SELECT COUNT(*) FROM public.course_completions)
-  let completedCourses = 0;
-  try {
-    const { count: compCount, error: compErr } = await client
-      .from('course_completions')
-      .select('*', { count: 'exact', head: true });
-    if (!compErr && compCount !== null) {
-      completedCourses = compCount;
-    }
-  } catch {
-    completedCourses = 0;
+  const { count: compCount, error: compErr } = await client
+    .from('course_completions')
+    .select('*', { count: 'exact', head: true });
+
+  if (compErr) {
+    throw new Error(`Failed to query course completions: ${compErr.message}`);
   }
+
+  const totalCourses = cCount ?? 0;
+  const assignedCourses = aCount ?? 0;
+  const completedCourses = compCount ?? 0;
 
   const total = totalEmployees ?? 0;
   const active = activeEmployees ?? 0;
@@ -482,7 +527,7 @@ export async function fetchEmployeeLearningActivity(employeeUuid: string): Promi
   try {
     const { data: assignments, error } = await client
       .from('course_assignments')
-      .select('id, course_id, status, progress_percentage, completed_at, courses(title)')
+      .select('id, course_id, status, courses(title)')
       .eq('employee_id', employeeUuid);
 
     if (error || !assignments || assignments.length === 0) {
@@ -490,18 +535,20 @@ export async function fetchEmployeeLearningActivity(employeeUuid: string): Promi
     }
 
     const total = assignments.length;
-    const completed = assignments.filter((a: any) => a.status === 'COMPLETED' || a.completed_at).length;
+    const completed = assignments.filter((a: any) => a.status === 'COMPLETED').length;
     const inProgress = assignments.filter((a: any) => a.status === 'IN_PROGRESS').length;
-    
+
     return {
       assignedCount: total,
       completedCount: completed,
       inProgressCount: inProgress,
+      // course_assignments has no progress_percentage column in the live
+      // schema, so per-assignment progress cannot be reported here.
       assignments: assignments.map((a: any) => ({
         id: a.id,
         courseTitle: a.courses?.title || `Course #${a.course_id}`,
-        status: a.status || 'NOT_STARTED',
-        progress: a.progress_percentage || 0
+        status: a.status || 'ASSIGNED',
+        progress: 0
       }))
     };
   } catch {
@@ -509,42 +556,97 @@ export async function fetchEmployeeLearningActivity(employeeUuid: string): Promi
   }
 }
 
+// ============================================================================
+// TEMP DIAGNOSTIC (admin_users authorization) — remove after the current
+// login issue is resolved. Holds ONLY non-sensitive information about the
+// most recent verifyAdminUser() call so the login screen can display it
+// in-app (no DevTools access available). Never holds tokens/keys/passwords.
+// ============================================================================
+export interface AdminAuthDiagnostic {
+  status: 'FOUND' | 'NOT_FOUND' | 'QUERY_ERROR' | 'NO_AUTH_USER_ID';
+  authUserId?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  errorDetails?: string | null;
+  errorHint?: string | null;
+}
+
+let lastAdminAuthDiagnostic: AdminAuthDiagnostic | null = null;
+
+export function getLastAdminAuthDiagnostic(): AdminAuthDiagnostic | null {
+  return lastAdminAuthDiagnostic;
+}
+
 /**
- * Verify active admin authorization in public.admin_users
- * Maps authenticated user via auth_user_id (auth.uid()) or verified email, requiring is_active = true
+ * Verify active admin authorization in public.admin_users.
+ *
+ * VERIFIED SCHEMA: public.admin_users has NO email or name column —
+ * only id, auth_user_id, full_name, role, is_active, created_at,
+ * updated_at. Identity is therefore matched exclusively by auth_user_id
+ * (the authenticated Supabase Auth user's UUID) — there is no email column
+ * on this table to match against. `email` (the login email, already known
+ * from the authenticated session) is carried through into the returned
+ * AdminUser purely for display — it is never read from admin_users.
  */
 export async function verifyAdminUser(email: string, authUserId?: string): Promise<AdminUser | null> {
   const client = getSupabaseClient();
-  const cleanEmail = email.trim().toLowerCase();
-  
+
+  // TEMP DIAGNOSTIC LOGGING — authorization runtime diagnosis, remove after use.
+  console.log('[AUTH DIAG] verifyAdminUser() called with authUserId:', authUserId);
+
+  if (!authUserId) {
+    // TEMP DIAGNOSTIC LOGGING
+    console.log('[AUTH DIAG] verifyAdminUser() returning null: no authUserId provided');
+    lastAdminAuthDiagnostic = { status: 'NO_AUTH_USER_ID' };
+    return null;
+  }
+
   try {
-    let query = client
+    const { data, error } = await client
       .from('admin_users')
-      .select('id, auth_user_id, email, name, role, is_active, created_at, updated_at')
-      .eq('is_active', true);
+      .select('id, auth_user_id, full_name, role, is_active, created_at, updated_at')
+      .eq('auth_user_id', authUserId)
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (authUserId) {
-      query = query.or(`auth_user_id.eq.${authUserId},email.ilike.${cleanEmail}`);
-    } else {
-      query = query.ilike('email', cleanEmail);
+    // TEMP DIAGNOSTIC LOGGING
+    console.log('[AUTH DIAG] admin_users query result — data exists:', Boolean(data), '| error exists:', Boolean(error));
+    if (error) {
+      console.log('[AUTH DIAG] admin_users query error — code:', (error as any).code, '| message:', error.message);
     }
-
-    const { data, error } = await query.maybeSingle();
+    if (data) {
+      console.log('[AUTH DIAG] admin_users row — auth_user_id:', data.auth_user_id, '| role:', data.role, '| is_active:', data.is_active);
+    }
 
     if (error) {
       console.warn('Error querying admin_users table:', error.message);
+      // TEMP DIAGNOSTIC — capture the exact PostgREST/Postgres error shape.
+      lastAdminAuthDiagnostic = {
+        status: 'QUERY_ERROR',
+        authUserId,
+        errorCode: (error as any).code ?? null,
+        errorMessage: error.message ?? null,
+        errorDetails: (error as any).details ?? null,
+        errorHint: (error as any).hint ?? null
+      };
       return null;
     }
 
     if (!data) {
+      // TEMP DIAGNOSTIC LOGGING
+      console.log('[AUTH DIAG] verifyAdminUser() returning null: no matching admin_users row for authUserId', authUserId);
+      lastAdminAuthDiagnostic = { status: 'NOT_FOUND', authUserId };
       return null;
     }
+
+    // TEMP DIAGNOSTIC
+    lastAdminAuthDiagnostic = { status: 'FOUND', authUserId };
 
     return {
       id: data.id,
       auth_user_id: data.auth_user_id,
-      email: data.email,
-      name: data.name || 'Admin User',
+      email: email.trim().toLowerCase(),
+      name: data.full_name || 'Admin User',
       role: data.role || 'LND_ADMIN',
       is_active: Boolean(data.is_active),
       created_at: data.created_at,
@@ -552,6 +654,12 @@ export async function verifyAdminUser(email: string, authUserId?: string): Promi
     };
   } catch (err) {
     console.error('Exception verifying admin user:', err);
+    // TEMP DIAGNOSTIC — an unexpected JS exception (not a PostgREST error object).
+    lastAdminAuthDiagnostic = {
+      status: 'QUERY_ERROR',
+      authUserId,
+      errorMessage: err instanceof Error ? err.message : String(err)
+    };
     return null;
   }
 }
@@ -1050,12 +1158,12 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
 
   let query = client
     .from('courses')
-    .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at', { count: 'exact' });
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at', { count: 'exact' });
 
-  // Text search on title, description, category, code
+  // Text search on title, description, category
   if (search && search.trim()) {
     const q = search.trim();
-    query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,category.ilike.%${q}%,code.ilike.%${q}%`);
+    query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%,category.ilike.%${q}%`);
   }
 
   // Category filter
@@ -1063,12 +1171,15 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
     query = query.eq('category', category);
   }
 
-  // Status filter
+  // Status filter — courses.status ('DRAFT' | 'PUBLISHED' | 'ARCHIVED') is the
+  // single source of truth for course lifecycle state.
   if (status && status !== 'ALL') {
-    if (status === 'PUBLISHED' || status === 'ACTIVE') {
-      query = query.eq('is_active', true);
-    } else if (status === 'DRAFT' || status === 'INACTIVE') {
-      query = query.eq('is_active', false);
+    if (status === 'ACTIVE') {
+      query = query.eq('status', 'PUBLISHED');
+    } else if (status === 'INACTIVE') {
+      query = query.eq('status', 'DRAFT');
+    } else {
+      query = query.eq('status', status);
     }
   }
 
@@ -1099,6 +1210,7 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
   // Fetch module counts for these courses
   let moduleCountMap = new Map<string | number, number>();
   let moduleIds: Array<string | number> = [];
+  let courseModuleIdsMap = new Map<string | number, Array<string | number>>();
   try {
     const { data: modulesData } = await client
       .from('modules')
@@ -1109,6 +1221,9 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
       modulesData.forEach((m: any) => {
         moduleCountMap.set(m.course_id, (moduleCountMap.get(m.course_id) || 0) + 1);
         moduleIds.push(m.id);
+        const list = courseModuleIdsMap.get(m.course_id) || [];
+        list.push(m.id);
+        courseModuleIdsMap.set(m.course_id, list);
       });
     }
   } catch (err) {
@@ -1158,18 +1273,16 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
     return {
       id: c.id,
       title: c.title,
-      code: c.code,
       description: c.description,
       category: c.category || 'General',
       difficulty: c.difficulty || 'Intermediate',
       estimated_duration_minutes: c.estimated_duration_minutes || 30,
       thumbnail_url: c.thumbnail_url,
-      is_active: Boolean(c.is_active),
-      status: c.is_active ? 'PUBLISHED' : (c.status || 'DRAFT'),
+      status: c.status || 'DRAFT',
       created_at: c.created_at,
       updated_at: c.updated_at,
       modules_count: mCount,
-      lessons_count: Array.from(lessonCountMap.entries()).reduce((sum, [, count]) => sum + count, 0),
+      lessons_count: (courseModuleIdsMap.get(c.id) || []).reduce<number>((sum, modId) => sum + (lessonCountMap.get(modId) || 0), 0),
       quizzes_count: quizCountMap.get(c.id) || 0
     };
   });
@@ -1190,7 +1303,7 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
   // 1. Fetch course
   const { data: courseData, error: courseErr } = await client
     .from('courses')
-    .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at')
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
     .eq('id', courseId)
     .maybeSingle();
 
@@ -1202,9 +1315,9 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
   // 2. Fetch modules in sequence order
   const { data: rawModules, error: modErr } = await client
     .from('modules')
-    .select('id, course_id, title, description, sequence_order, is_active, created_at, updated_at')
+    .select('id, course_id, title, description, sequence, created_at, updated_at')
     .eq('course_id', courseId)
-    .order('sequence_order', { ascending: true, nullsFirst: false });
+    .order('sequence', { ascending: true, nullsFirst: false });
 
   if (modErr) {
     console.warn('Error fetching modules:', modErr);
@@ -1218,9 +1331,9 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
   if (moduleIds.length > 0) {
     const { data: rawLessons, error: lessErr } = await client
       .from('lessons')
-      .select('id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at')
+      .select('id, module_id, title, lesson_type, content_text, content_url, duration_seconds, sequence, created_at, updated_at')
       .in('module_id', moduleIds)
-      .order('sequence_order', { ascending: true, nullsFirst: false });
+      .order('sequence', { ascending: true, nullsFirst: false });
 
     if (lessErr) {
       console.warn('Error fetching lessons:', lessErr);
@@ -1232,13 +1345,13 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
         id: l.id,
         module_id: l.module_id,
         title: l.title,
-        content_type: l.content_type || 'TEXT',
+        content_type: l.lesson_type || 'TEXT',
         content_text: l.content_text,
-        video_url: l.video_url,
-        pdf_url: l.pdf_url,
-        duration_minutes: l.duration_minutes || 5,
-        sequence_order: l.sequence_order || 1,
-        is_active: l.is_active !== undefined ? l.is_active : true,
+        content_url: l.content_url,
+        video_url: l.lesson_type === 'VIDEO' ? l.content_url : undefined,
+        pdf_url: l.lesson_type === 'PDF' ? l.content_url : undefined,
+        duration_minutes: l.duration_seconds ? Math.round(l.duration_seconds / 60) : 5,
+        sequence_order: l.sequence || 1,
         created_at: l.created_at,
         updated_at: l.updated_at
       });
@@ -1352,8 +1465,7 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
     course_id: m.course_id,
     title: m.title,
     description: m.description,
-    sequence_order: m.sequence_order || 1,
-    is_active: m.is_active !== undefined ? m.is_active : true,
+    sequence_order: m.sequence || 1,
     created_at: m.created_at,
     updated_at: m.updated_at,
     lessons: lessonsByModule.get(m.id) || [],
@@ -1366,14 +1478,12 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
   return {
     id: courseData.id,
     title: courseData.title,
-    code: courseData.code,
     description: courseData.description,
     category: courseData.category || 'General',
     difficulty: courseData.difficulty || 'Intermediate',
     estimated_duration_minutes: courseData.estimated_duration_minutes || 30,
     thumbnail_url: courseData.thumbnail_url,
-    is_active: Boolean(courseData.is_active),
-    status: courseData.is_active ? 'PUBLISHED' : (courseData.status || 'DRAFT'),
+    status: courseData.status || 'DRAFT',
     created_at: courseData.created_at,
     updated_at: courseData.updated_at,
     modules_count: modules.length,
@@ -1393,20 +1503,18 @@ export async function createCourse(input: CreateCourseInput): Promise<Course> {
 
   const payload: any = {
     title: cleanTitle,
-    code: input.code?.trim() || null,
     description: input.description?.trim() || '',
     category: input.category?.trim() || 'General',
     difficulty: input.difficulty || 'Intermediate',
     estimated_duration_minutes: Number(input.estimated_duration_minutes) || 30,
     thumbnail_url: input.thumbnail_url?.trim() || null,
-    is_active: false,
     status: 'DRAFT'
   };
 
   const { data, error } = await client
     .from('courses')
     .insert([payload])
-    .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at')
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1425,14 +1533,12 @@ export async function createCourse(input: CreateCourseInput): Promise<Course> {
   return {
     id: data.id,
     title: data.title,
-    code: data.code,
     description: data.description,
     category: data.category,
     difficulty: data.difficulty,
     estimated_duration_minutes: data.estimated_duration_minutes,
     thumbnail_url: data.thumbnail_url,
-    is_active: Boolean(data.is_active),
-    status: data.is_active ? 'PUBLISHED' : 'DRAFT',
+    status: data.status || 'DRAFT',
     created_at: data.created_at,
     updated_at: data.updated_at,
     modules_count: 0,
@@ -1459,20 +1565,18 @@ export async function updateCourse(
   };
 
   if (cleanTitle !== undefined) payload.title = cleanTitle;
-  if (input.code !== undefined) payload.code = input.code?.trim() || null;
   if (input.description !== undefined) payload.description = input.description?.trim() || '';
   if (input.category !== undefined) payload.category = input.category?.trim() || 'General';
   if (input.difficulty !== undefined) payload.difficulty = input.difficulty;
   if (input.estimated_duration_minutes !== undefined) payload.estimated_duration_minutes = Number(input.estimated_duration_minutes);
   if (input.thumbnail_url !== undefined) payload.thumbnail_url = input.thumbnail_url?.trim() || null;
-  if (input.is_active !== undefined) payload.is_active = input.is_active;
   if (input.status !== undefined) payload.status = input.status;
 
   const { data, error } = await client
     .from('courses')
     .update(payload)
     .eq('id', courseId)
-    .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at')
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1488,7 +1592,7 @@ export async function updateCourse(
     previous_values: previousRecord ? {
       title: previousRecord.title,
       category: previousRecord.category,
-      is_active: previousRecord.is_active
+      status: previousRecord.status
     } : null,
     new_values: payload
   });
@@ -1496,14 +1600,12 @@ export async function updateCourse(
   return {
     id: data.id,
     title: data.title,
-    code: data.code,
     description: data.description,
     category: data.category,
     difficulty: data.difficulty,
     estimated_duration_minutes: data.estimated_duration_minutes,
     thumbnail_url: data.thumbnail_url,
-    is_active: Boolean(data.is_active),
-    status: data.is_active ? 'PUBLISHED' : (data.status || 'DRAFT'),
+    status: data.status || 'DRAFT',
     created_at: data.created_at,
     updated_at: data.updated_at
   };
@@ -1532,7 +1634,6 @@ export async function toggleCoursePublish(
   }
 
   const payload: any = {
-    is_active: publish,
     status: publish ? 'PUBLISHED' : 'DRAFT',
     updated_at: new Date().toISOString()
   };
@@ -1541,7 +1642,7 @@ export async function toggleCoursePublish(
     .from('courses')
     .update(payload)
     .eq('id', courseId)
-    .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at')
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1554,14 +1655,13 @@ export async function toggleCoursePublish(
     action: publish ? 'COURSE_PUBLISHED' : 'COURSE_UPDATED',
     entity_type: 'COURSE',
     entity_id: String(courseId),
-    previous_values: { is_active: currentCourse.is_active, status: currentCourse.status },
+    previous_values: { status: currentCourse.status },
     new_values: payload
   });
 
   return {
     ...currentCourse,
-    is_active: Boolean(data.is_active),
-    status: data.is_active ? 'PUBLISHED' : 'DRAFT',
+    status: data.status || (publish ? 'PUBLISHED' : 'DRAFT'),
     updated_at: data.updated_at
   };
 }
@@ -1581,14 +1681,13 @@ export async function createModule(
     course_id: courseId,
     title: cleanTitle,
     description: input.description?.trim() || '',
-    sequence_order: input.sequence_order || 1,
-    is_active: true
+    sequence: input.sequence_order || 1
   };
 
   const { data, error } = await client
     .from('modules')
     .insert([payload])
-    .select('id, course_id, title, description, sequence_order, is_active, created_at, updated_at')
+    .select('id, course_id, title, description, sequence, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1608,8 +1707,7 @@ export async function createModule(
     course_id: data.course_id,
     title: data.title,
     description: data.description,
-    sequence_order: data.sequence_order,
-    is_active: data.is_active,
+    sequence_order: data.sequence,
     created_at: data.created_at,
     updated_at: data.updated_at,
     lessons: [],
@@ -1630,13 +1728,13 @@ export async function updateModule(
   };
   if (input.title !== undefined) payload.title = input.title.trim();
   if (input.description !== undefined) payload.description = input.description.trim();
-  if (input.sequence_order !== undefined) payload.sequence_order = input.sequence_order;
+  if (input.sequence_order !== undefined) payload.sequence = input.sequence_order;
 
   const { data, error } = await client
     .from('modules')
     .update(payload)
     .eq('id', moduleId)
-    .select('id, course_id, title, description, sequence_order, is_active, created_at, updated_at')
+    .select('id, course_id, title, description, sequence, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1656,8 +1754,7 @@ export async function updateModule(
     course_id: data.course_id,
     title: data.title,
     description: data.description,
-    sequence_order: data.sequence_order,
-    is_active: data.is_active,
+    sequence_order: data.sequence,
     created_at: data.created_at,
     updated_at: data.updated_at
   };
@@ -1673,7 +1770,7 @@ export async function reorderModules(
   for (const item of moduleOrders) {
     await client
       .from('modules')
-      .update({ sequence_order: item.sequence_order, updated_at: new Date().toISOString() })
+      .update({ sequence: item.sequence_order, updated_at: new Date().toISOString() })
       .eq('id', item.id);
   }
 }
@@ -1700,19 +1797,17 @@ export async function createLesson(
   const payload: any = {
     module_id: moduleId,
     title: cleanTitle,
-    content_type: input.content_type || 'TEXT',
+    lesson_type: input.content_type || 'TEXT',
     content_text: input.content_text || '',
-    video_url: input.video_url?.trim() || null,
-    pdf_url: input.pdf_url?.trim() || null,
-    duration_minutes: Number(input.duration_minutes) || 5,
-    sequence_order: input.sequence_order || 1,
-    is_active: true
+    content_url: input.video_url?.trim() || input.pdf_url?.trim() || null,
+    duration_seconds: Math.round((Number(input.duration_minutes) || 5) * 60),
+    sequence: input.sequence_order || 1
   };
 
   const { data, error } = await client
     .from('lessons')
     .insert([payload])
-    .select('id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at')
+    .select('id, module_id, title, lesson_type, content_text, content_url, duration_seconds, sequence, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1731,13 +1826,13 @@ export async function createLesson(
     id: data.id,
     module_id: data.module_id,
     title: data.title,
-    content_type: data.content_type,
+    content_type: data.lesson_type,
     content_text: data.content_text,
-    video_url: data.video_url,
-    pdf_url: data.pdf_url,
-    duration_minutes: data.duration_minutes,
-    sequence_order: data.sequence_order,
-    is_active: data.is_active,
+    content_url: data.content_url,
+    video_url: data.lesson_type === 'VIDEO' ? data.content_url : undefined,
+    pdf_url: data.lesson_type === 'PDF' ? data.content_url : undefined,
+    duration_minutes: data.duration_seconds ? Math.round(data.duration_seconds / 60) : 5,
+    sequence_order: data.sequence,
     created_at: data.created_at,
     updated_at: data.updated_at
   };
@@ -1756,19 +1851,18 @@ export async function updateLesson(
   };
 
   if (input.title !== undefined) payload.title = input.title.trim();
-  if (input.content_type !== undefined) payload.content_type = input.content_type;
+  if (input.content_type !== undefined) payload.lesson_type = input.content_type;
   if (input.content_text !== undefined) payload.content_text = input.content_text;
-  if (input.video_url !== undefined) payload.video_url = input.video_url?.trim() || null;
-  if (input.pdf_url !== undefined) payload.pdf_url = input.pdf_url?.trim() || null;
-  if (input.duration_minutes !== undefined) payload.duration_minutes = Number(input.duration_minutes);
-  if (input.sequence_order !== undefined) payload.sequence_order = input.sequence_order;
-  if (input.is_active !== undefined) payload.is_active = input.is_active;
+  if (input.video_url !== undefined) payload.content_url = input.video_url?.trim() || null;
+  if (input.pdf_url !== undefined) payload.content_url = input.pdf_url?.trim() || null;
+  if (input.duration_minutes !== undefined) payload.duration_seconds = Math.round(Number(input.duration_minutes) * 60);
+  if (input.sequence_order !== undefined) payload.sequence = input.sequence_order;
 
   const { data, error } = await client
     .from('lessons')
     .update(payload)
     .eq('id', lessonId)
-    .select('id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at')
+    .select('id, module_id, title, lesson_type, content_text, content_url, duration_seconds, sequence, created_at, updated_at')
     .single();
 
   if (error) {
@@ -1787,13 +1881,13 @@ export async function updateLesson(
     id: data.id,
     module_id: data.module_id,
     title: data.title,
-    content_type: data.content_type,
+    content_type: data.lesson_type,
     content_text: data.content_text,
-    video_url: data.video_url,
-    pdf_url: data.pdf_url,
-    duration_minutes: data.duration_minutes,
-    sequence_order: data.sequence_order,
-    is_active: data.is_active,
+    content_url: data.content_url,
+    video_url: data.lesson_type === 'VIDEO' ? data.content_url : undefined,
+    pdf_url: data.lesson_type === 'PDF' ? data.content_url : undefined,
+    duration_minutes: data.duration_seconds ? Math.round(data.duration_seconds / 60) : 5,
+    sequence_order: data.sequence,
     created_at: data.created_at,
     updated_at: data.updated_at
   };
@@ -1809,7 +1903,7 @@ export async function reorderLessons(
   for (const item of lessonOrders) {
     await client
       .from('lessons')
-      .update({ sequence_order: item.sequence_order, updated_at: new Date().toISOString() })
+      .update({ sequence: item.sequence_order, updated_at: new Date().toISOString() })
       .eq('id', item.id);
   }
 }
@@ -2011,16 +2105,17 @@ export async function saveQuizWithQuestions(input: {
 // ============================================================
 
 /**
- * Fetch list of published and active courses eligible for assignment.
- * Filters strictly by is_active = true AND status = 'PUBLISHED'.
+ * Fetch list of published courses eligible for assignment.
+ * Filters strictly by status = 'PUBLISHED' (the single source of truth for
+ * course lifecycle state — public.courses has no is_active column).
  */
 export async function fetchAssignableCourses(): Promise<Course[]> {
   const client = getSupabaseClient();
   try {
     const { data, error } = await client
       .from('courses')
-      .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at')
-      .eq('is_active', true)
+      .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
+      .eq('status', 'PUBLISHED')
       .order('title', { ascending: true });
 
     if (error) {
@@ -2029,20 +2124,16 @@ export async function fetchAssignableCourses(): Promise<Course[]> {
     }
 
     // Filter strictly to ensure status is PUBLISHED
-    const published = (data || []).filter((c: any) => 
-      Boolean(c.is_active) && (c.status === 'PUBLISHED' || !c.status)
-    );
+    const published = (data || []).filter((c: any) => c.status === 'PUBLISHED');
 
     return published.map((c: any) => ({
       id: c.id,
       title: c.title,
-      code: c.code,
       description: c.description,
       category: c.category || 'General',
       difficulty: c.difficulty || 'Intermediate',
       estimated_duration_minutes: c.estimated_duration_minutes || 30,
       thumbnail_url: c.thumbnail_url,
-      is_active: true,
       status: 'PUBLISHED',
       created_at: c.created_at,
       updated_at: c.updated_at
@@ -2094,20 +2185,17 @@ export async function fetchCourseAssignments(filters: Partial<AssignmentFilters>
         employee_id,
         assigned_by,
         assigned_at,
-        due_date,
+        deadline,
         status,
-        is_mandatory,
-        progress_percentage,
-        completed_at,
+        revoked_at,
+        revoked_by,
         created_at,
         updated_at,
         courses (
           id,
           title,
-          code,
           category,
           estimated_duration_minutes,
-          is_active,
           status
         ),
         employees (
@@ -2141,17 +2229,15 @@ export async function fetchCourseAssignments(filters: Partial<AssignmentFilters>
     if (filters.status && filters.status !== 'ALL') {
       if (filters.status === 'OVERDUE') {
         const nowIso = new Date().toISOString();
-        query = query.lt('due_date', nowIso).neq('status', 'COMPLETED').neq('status', 'REVOKED');
+        query = query.lt('deadline', nowIso).neq('status', 'COMPLETED').neq('status', 'REVOKED');
       } else {
         query = query.eq('status', filters.status);
       }
     }
 
-    // Filter by Mandatory / Optional
-    if (filters.type && filters.type !== 'ALL') {
-      const isMandatory = filters.type === 'MANDATORY';
-      query = query.eq('is_mandatory', isMandatory);
-    }
+    // NOTE: course_assignments has no is_mandatory column in the live schema —
+    // there is no persisted field to filter on, so the Mandatory/Optional
+    // filter cannot be applied server-side. Left as a client-only UI concept.
 
     // Pagination
     const from = (page - 1) * pageSize;
@@ -2161,18 +2247,18 @@ export async function fetchCourseAssignments(filters: Partial<AssignmentFilters>
     const { data, count, error } = await query;
 
     if (error) {
-      console.warn('Error querying public.course_assignments:', error.message);
-      return { assignments: [], totalCount: 0 };
+      console.error('Error querying public.course_assignments:', error.message);
+      throw error;
     }
 
     const now = new Date();
 
     let assignments: CourseAssignment[] = (data || []).map((row: any) => {
-      let status = row.status || 'NOT_STARTED';
-      
-      // Dynamic OVERDUE detection if due_date is past and not completed/revoked
-      if (row.due_date && status !== 'COMPLETED' && status !== 'REVOKED') {
-        const dueDate = new Date(row.due_date);
+      let status = row.status || 'ASSIGNED';
+
+      // Dynamic OVERDUE detection (display-only, never persisted) if deadline is past and not completed/revoked
+      if (row.deadline && status !== 'COMPLETED' && status !== 'REVOKED') {
+        const dueDate = new Date(row.deadline);
         if (dueDate < now) {
           status = 'OVERDUE';
         }
@@ -2197,10 +2283,8 @@ export async function fetchCourseAssignments(filters: Partial<AssignmentFilters>
       const crs = row.courses ? {
         id: row.courses.id,
         title: row.courses.title,
-        code: row.courses.code,
         category: row.courses.category || 'General',
         estimated_duration_minutes: row.courses.estimated_duration_minutes || 30,
-        is_active: Boolean(row.courses.is_active),
         status: row.courses.status || 'PUBLISHED',
         created_at: '',
         updated_at: ''
@@ -2212,11 +2296,10 @@ export async function fetchCourseAssignments(filters: Partial<AssignmentFilters>
         employee_id: row.employee_id,
         assigned_by: row.assigned_by,
         assigned_at: row.assigned_at || row.created_at,
-        due_date: row.due_date,
+        due_date: row.deadline,
         status: status as any,
-        is_mandatory: row.is_mandatory !== undefined ? Boolean(row.is_mandatory) : true,
-        progress_percentage: row.progress_percentage || 0,
-        completed_at: row.completed_at,
+        revoked_at: row.revoked_at,
+        revoked_by: row.revoked_by,
         created_at: row.created_at,
         updated_at: row.updated_at,
         course: crs,
@@ -2248,7 +2331,7 @@ export async function fetchCourseAssignments(filters: Partial<AssignmentFilters>
     };
   } catch (err) {
     console.error('Exception in fetchCourseAssignments:', err);
-    return { assignments: [], totalCount: 0 };
+    throw err;
   }
 }
 
@@ -2260,7 +2343,7 @@ export async function fetchAssignmentStats(): Promise<AssignmentStats> {
   try {
     const { data, error } = await client
       .from('course_assignments')
-      .select('id, status, due_date');
+      .select('id, status, deadline');
 
     if (error || !data) {
       return {
@@ -2281,7 +2364,7 @@ export async function fetchAssignmentStats(): Promise<AssignmentStats> {
     let revoked = 0;
 
     data.forEach((row: any) => {
-      const status = row.status || 'NOT_STARTED';
+      const status = row.status || 'ASSIGNED';
       if (status === 'REVOKED') {
         revoked++;
         return;
@@ -2292,8 +2375,8 @@ export async function fetchAssignmentStats(): Promise<AssignmentStats> {
       }
 
       // Check overdue
-      if (row.due_date) {
-        const dueDate = new Date(row.due_date);
+      if (row.deadline) {
+        const dueDate = new Date(row.deadline);
         if (dueDate < now) {
           overdue++;
           return;
@@ -2389,7 +2472,7 @@ export async function calculateBulkAssignmentAudience(
   // 2. Fetch existing assignments for this course to prevent duplicates
   const { data: existingAssignments, error: assignErr } = await client
     .from('course_assignments')
-    .select('id, course_id, employee_id, status, due_date, created_at')
+    .select('id, course_id, employee_id, status, deadline, created_at')
     .eq('course_id', courseId);
 
   if (assignErr) {
@@ -2438,10 +2521,10 @@ export async function calculateBulkAssignmentAudience(
 export async function assignCourseIndividual(input: CreateIndividualAssignmentInput): Promise<CourseAssignment> {
   const client = getSupabaseClient();
 
-  // 1. Verify Course is Published & Active
+  // 1. Verify Course is Published
   const { data: course, error: courseErr } = await client
     .from('courses')
-    .select('id, title, is_active, status')
+    .select('id, title, status')
     .eq('id', input.courseId)
     .single();
 
@@ -2449,8 +2532,8 @@ export async function assignCourseIndividual(input: CreateIndividualAssignmentIn
     throw new Error('Course not found.');
   }
 
-  if (!course.is_active || course.status === 'DRAFT') {
-    throw new Error('Only PUBLISHED and Active courses can be assigned to learners.');
+  if (course.status !== 'PUBLISHED') {
+    throw new Error('Only PUBLISHED courses can be assigned to learners.');
   }
 
   // 2. Verify Employee is Active & Enabled
@@ -2503,16 +2586,16 @@ export async function assignCourseIndividual(input: CreateIndividualAssignmentIn
   const adminEmail = user?.email || 'admin@rupeek.com';
   const nowIso = new Date().toISOString();
 
-  // 6. Insert Assignment
+  // 6. Insert Assignment. assigned_by is a uuid FK to auth.users(id) — the
+  // authenticated admin's auth user id, not their email. status is left
+  // unset so the column's own NOT NULL DEFAULT ('ASSIGNED') applies, since
+  // the full set of valid assignment_status enum values is not confirmed.
   const assignmentPayload: any = {
     course_id: input.courseId,
     employee_id: empTargetId,
-    assigned_by: adminEmail,
+    assigned_by: user?.id || null,
     assigned_at: nowIso,
-    due_date: input.dueDate || null,
-    status: 'NOT_STARTED',
-    is_mandatory: Boolean(input.isMandatory),
-    progress_percentage: 0,
+    deadline: input.dueDate || null,
     created_at: nowIso,
     updated_at: nowIso
   };
@@ -2520,7 +2603,7 @@ export async function assignCourseIndividual(input: CreateIndividualAssignmentIn
   const { data: createdAssignment, error: insertErr } = await client
     .from('course_assignments')
     .insert([assignmentPayload])
-    .select('id, course_id, employee_id, assigned_by, assigned_at, due_date, status, is_mandatory, progress_percentage, created_at, updated_at')
+    .select('id, course_id, employee_id, assigned_by, assigned_at, deadline, status, created_at, updated_at')
     .single();
 
   if (insertErr || !createdAssignment) {
@@ -2550,10 +2633,8 @@ export async function assignCourseIndividual(input: CreateIndividualAssignmentIn
     employee_id: createdAssignment.employee_id,
     assigned_by: createdAssignment.assigned_by,
     assigned_at: createdAssignment.assigned_at,
-    due_date: createdAssignment.due_date,
+    due_date: createdAssignment.deadline,
     status: createdAssignment.status,
-    is_mandatory: createdAssignment.is_mandatory,
-    progress_percentage: createdAssignment.progress_percentage || 0,
     created_at: createdAssignment.created_at,
     updated_at: createdAssignment.updated_at,
     course,
@@ -2574,10 +2655,10 @@ export async function assignCourseBulk(input: CreateBulkAssignmentInput): Promis
     throw new Error('No eligible employees selected for bulk assignment.');
   }
 
-  // 1. Verify Course is Published & Active
+  // 1. Verify Course is Published
   const { data: course, error: courseErr } = await client
     .from('courses')
-    .select('id, title, is_active, status')
+    .select('id, title, status')
     .eq('id', input.courseId)
     .single();
 
@@ -2585,8 +2666,8 @@ export async function assignCourseBulk(input: CreateBulkAssignmentInput): Promis
     throw new Error('Course not found.');
   }
 
-  if (!course.is_active || course.status === 'DRAFT') {
-    throw new Error('Only PUBLISHED and Active courses can be assigned.');
+  if (course.status !== 'PUBLISHED') {
+    throw new Error('Only PUBLISHED courses can be assigned.');
   }
 
   // 2. Due date validation
@@ -2648,15 +2729,16 @@ export async function assignCourseBulk(input: CreateBulkAssignmentInput): Promis
   const batchId = `BATCH-${Date.now()}`;
 
   // 6. Build atomic payload array. employee_id must be the employees.id uuid.
+  // assigned_by is a uuid FK to auth.users(id) — the authenticated admin's
+  // auth user id, not their email. status is left unset so the column's own
+  // NOT NULL DEFAULT ('ASSIGNED') applies, since the full set of valid
+  // assignment_status enum values is not confirmed.
   const payloads = finalEmployeesToAssign.map((emp: any) => ({
     course_id: input.courseId,
     employee_id: emp.id,
-    assigned_by: adminEmail,
+    assigned_by: user?.id || null,
     assigned_at: nowIso,
-    due_date: input.dueDate || null,
-    status: 'NOT_STARTED',
-    is_mandatory: Boolean(input.isMandatory),
-    progress_percentage: 0,
+    deadline: input.dueDate || null,
     created_at: nowIso,
     updated_at: nowIso
   }));
@@ -2721,11 +2803,14 @@ export async function revokeCourseAssignment(
   const adminEmail = user?.email || 'admin@rupeek.com';
   const nowIso = new Date().toISOString();
 
-  // 2. Update status to REVOKED
+  // 2. Update status to REVOKED. revoked_by is a uuid FK to auth.users(id) —
+  // the authenticated admin's auth user id, not their email.
   const { error: updateErr } = await client
     .from('course_assignments')
     .update({
       status: 'REVOKED',
+      revoked_at: nowIso,
+      revoked_by: user?.id || null,
       updated_at: nowIso
     })
     .eq('id', assignmentId);
@@ -2857,7 +2942,7 @@ export async function fetchLearnerDashboardStats(employeeIdentifier: string): Pr
   try {
     const { data, error } = await client
       .from('course_assignments')
-      .select('id, due_date, status, is_mandatory')
+      .select('id, deadline, status')
       .eq('employee_id', cleanId);
 
     if (error || !data) {
@@ -2884,11 +2969,10 @@ export async function fetchLearnerDashboardStats(employeeIdentifier: string): Pr
       // Ignore REVOKED assignments for active metrics
       if (row.status === 'REVOKED') return;
 
-      if (row.is_mandatory) {
-        mandatoryCourses++;
-      } else {
-        optionalCourses++;
-      }
+      // course_assignments has no is_mandatory column in the live schema —
+      // there is no persisted distinction, so every active assignment is
+      // counted as mandatory (matches the same default used elsewhere).
+      mandatoryCourses++;
 
       if (row.status === 'COMPLETED') {
         completed++;
@@ -2899,8 +2983,8 @@ export async function fetchLearnerDashboardStats(employeeIdentifier: string): Pr
       }
 
       // Check dynamic overdue
-      if (row.due_date && row.status !== 'COMPLETED') {
-        const dueDate = new Date(row.due_date);
+      if (row.deadline && row.status !== 'COMPLETED') {
+        const dueDate = new Date(row.deadline);
         if (dueDate < now) {
           overdue++;
         }
@@ -2948,23 +3032,18 @@ export async function fetchLearnerCourses(employeeIdentifier: string): Promise<C
         employee_id,
         assigned_by,
         assigned_at,
-        due_date,
+        deadline,
         status,
-        is_mandatory,
-        progress_percentage,
-        completed_at,
         created_at,
         updated_at,
         courses (
           id,
           title,
-          code,
           description,
           category,
           difficulty,
           estimated_duration_minutes,
           thumbnail_url,
-          is_active,
           status
         )
       `)
@@ -2980,10 +3059,10 @@ export async function fetchLearnerCourses(employeeIdentifier: string): Promise<C
     const now = new Date();
 
     return (data || []).map((row: any) => {
-      let status = row.status || 'NOT_STARTED';
+      let status = row.status || 'ASSIGNED';
 
-      if (row.due_date && status !== 'COMPLETED') {
-        const dueDate = new Date(row.due_date);
+      if (row.deadline && status !== 'COMPLETED') {
+        const dueDate = new Date(row.deadline);
         if (dueDate < now) {
           status = 'OVERDUE';
         }
@@ -2992,20 +3071,17 @@ export async function fetchLearnerCourses(employeeIdentifier: string): Promise<C
       const crs: Course = row.courses ? {
         id: row.courses.id,
         title: row.courses.title,
-        code: row.courses.code,
         description: row.courses.description,
         category: row.courses.category || 'General',
         difficulty: row.courses.difficulty || 'Intermediate',
         estimated_duration_minutes: row.courses.estimated_duration_minutes || 30,
         thumbnail_url: row.courses.thumbnail_url,
-        is_active: Boolean(row.courses.is_active),
         status: row.courses.status || 'PUBLISHED',
         created_at: '',
         updated_at: ''
       } : {
         id: row.course_id,
-        title: 'Assigned Course',
-        is_active: true
+        title: 'Assigned Course'
       };
 
       return {
@@ -3014,11 +3090,8 @@ export async function fetchLearnerCourses(employeeIdentifier: string): Promise<C
         employee_id: row.employee_id,
         assigned_by: row.assigned_by,
         assigned_at: row.assigned_at || row.created_at,
-        due_date: row.due_date,
+        due_date: row.deadline,
         status: status as any,
-        is_mandatory: row.is_mandatory !== undefined ? Boolean(row.is_mandatory) : true,
-        progress_percentage: row.progress_percentage || 0,
-        completed_at: row.completed_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
         course: crs
@@ -3064,11 +3137,8 @@ export async function fetchLearnerCourseCurriculum(
       employee_id,
       assigned_by,
       assigned_at,
-      due_date,
+      deadline,
       status,
-      is_mandatory,
-      progress_percentage,
-      completed_at,
       created_at,
       updated_at
     `)
@@ -3084,7 +3154,7 @@ export async function fetchLearnerCourseCurriculum(
   // 2. Fetch Course Structure (modules & lessons)
   const { data: courseData, error: courseErr } = await client
     .from('courses')
-    .select('id, title, code, description, category, difficulty, estimated_duration_minutes, thumbnail_url, is_active, status, created_at, updated_at')
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
     .eq('id', courseId)
     .single();
 
@@ -3095,9 +3165,9 @@ export async function fetchLearnerCourseCurriculum(
   // Fetch modules
   const { data: rawModules } = await client
     .from('modules')
-    .select('id, course_id, title, description, sequence_order, is_active')
+    .select('id, course_id, title, description, sequence')
     .eq('course_id', courseId)
-    .order('sequence_order', { ascending: true, nullsFirst: false });
+    .order('sequence', { ascending: true, nullsFirst: false });
 
   const modulesList = rawModules || [];
   const moduleIds = modulesList.map((m: any) => m.id);
@@ -3109,9 +3179,9 @@ export async function fetchLearnerCourseCurriculum(
   if (moduleIds.length > 0) {
     const { data: rawLessons } = await client
       .from('lessons')
-      .select('id, module_id, title, content_type, content_text, video_url, pdf_url, duration_minutes, sequence_order, is_active, created_at, updated_at')
+      .select('id, module_id, title, lesson_type, content_text, content_url, duration_seconds, sequence, created_at, updated_at')
       .in('module_id', moduleIds)
-      .order('sequence_order', { ascending: true, nullsFirst: false });
+      .order('sequence', { ascending: true, nullsFirst: false });
 
     (rawLessons || []).forEach((l: any) => {
       allLessonIds.push(l.id);
@@ -3120,13 +3190,13 @@ export async function fetchLearnerCourseCurriculum(
         id: l.id,
         module_id: l.module_id,
         title: l.title,
-        content_type: l.content_type || 'TEXT',
+        content_type: l.lesson_type || 'TEXT',
         content_text: l.content_text,
-        video_url: l.video_url,
-        pdf_url: l.pdf_url,
-        duration_minutes: l.duration_minutes || 5,
-        sequence_order: l.sequence_order || 1,
-        is_active: l.is_active !== undefined ? l.is_active : true,
+        content_url: l.content_url,
+        video_url: l.lesson_type === 'VIDEO' ? l.content_url : undefined,
+        pdf_url: l.lesson_type === 'PDF' ? l.content_url : undefined,
+        duration_minutes: l.duration_seconds ? Math.round(l.duration_seconds / 60) : 5,
+        sequence_order: l.sequence || 1,
         created_at: l.created_at,
         updated_at: l.updated_at
       });
@@ -3314,8 +3384,7 @@ export async function fetchLearnerCourseCurriculum(
     course_id: m.course_id,
     title: m.title,
     description: m.description,
-    sequence_order: m.sequence_order || 1,
-    is_active: m.is_active !== undefined ? m.is_active : true,
+    sequence_order: m.sequence || 1,
     lessons: lessonsByModule.get(m.id) || [],
     quizzes: []
   }));
@@ -3325,13 +3394,11 @@ export async function fetchLearnerCourseCurriculum(
   const course: Course = {
     id: courseData.id,
     title: courseData.title,
-    code: courseData.code,
     description: courseData.description,
     category: courseData.category || 'General',
     difficulty: courseData.difficulty || 'Intermediate',
     estimated_duration_minutes: courseData.estimated_duration_minutes || 30,
     thumbnail_url: courseData.thumbnail_url,
-    is_active: Boolean(courseData.is_active),
     status: courseData.status || 'PUBLISHED',
     created_at: courseData.created_at,
     updated_at: courseData.updated_at,
@@ -3347,11 +3414,8 @@ export async function fetchLearnerCourseCurriculum(
     employee_id: assignmentData.employee_id,
     assigned_by: assignmentData.assigned_by,
     assigned_at: assignmentData.assigned_at,
-    due_date: assignmentData.due_date,
+    due_date: assignmentData.deadline,
     status: assignmentData.status,
-    is_mandatory: assignmentData.is_mandatory !== undefined ? Boolean(assignmentData.is_mandatory) : true,
-    progress_percentage: assignmentData.progress_percentage || 0,
-    completed_at: assignmentData.completed_at,
     created_at: assignmentData.created_at,
     updated_at: assignmentData.updated_at,
     course
@@ -3384,7 +3448,7 @@ export async function markLessonCompleted(
 ): Promise<{
   progressPercentage: number;
   isCourseCompleted: boolean;
-  status: AssignmentStatus;
+  status: PersistedAssignmentStatus;
 }> {
   const client = getSupabaseClient();
   const cleanEmpId = employeeIdentifier.trim();
@@ -3393,7 +3457,7 @@ export async function markLessonCompleted(
   // 1. Verify Active Assignment
   const { data: assignment, error: assignErr } = await client
     .from('course_assignments')
-    .select('id, course_id, employee_id, status, progress_percentage')
+    .select('id, course_id, employee_id, status')
     .eq('course_id', courseId)
     .eq('employee_id', cleanEmpId)
     .neq('status', 'REVOKED')
@@ -3498,18 +3562,17 @@ export async function markLessonCompleted(
   const newProgress = Math.min(100, Math.round((completedItems / totalCourseItems) * 100));
 
   const isCompleted = (completedLessonsCount >= totalLessonsCount && passedQuizzesCount >= totalQuizzesCount);
-  const newStatus: AssignmentStatus = isCompleted ? 'COMPLETED' : 'IN_PROGRESS';
+  const newStatus: PersistedAssignmentStatus = isCompleted ? 'COMPLETED' : 'IN_PROGRESS';
 
-  // 4. Update assignment
+  // 4. Update assignment. course_assignments has no progress_percentage or
+  // completed_at column in the live schema — newProgress/isCompleted are
+  // still computed above (from lesson_progress/quiz_attempts) and returned
+  // to the caller for immediate UI feedback, they are just not persisted
+  // onto course_assignments itself. Only status/updated_at are real columns.
   const updatePayload: any = {
-    progress_percentage: newProgress,
     status: newStatus,
     updated_at: nowIso
   };
-
-  if (isCompleted && assignment.status !== 'COMPLETED') {
-    updatePayload.completed_at = nowIso;
-  }
 
   await client
     .from('course_assignments')
@@ -3623,17 +3686,13 @@ export async function fetchLearnerHistory(employeeIdentifier: string): Promise<C
         employee_id,
         assigned_by,
         assigned_at,
-        due_date,
+        deadline,
         status,
-        is_mandatory,
-        progress_percentage,
-        completed_at,
         created_at,
         updated_at,
         courses (
           id,
           title,
-          code,
           category,
           estimated_duration_minutes,
           thumbnail_url
@@ -3653,21 +3712,16 @@ export async function fetchLearnerHistory(employeeIdentifier: string): Promise<C
       employee_id: row.employee_id,
       assigned_by: row.assigned_by,
       assigned_at: row.assigned_at || row.created_at,
-      due_date: row.due_date,
+      due_date: row.deadline,
       status: row.status,
-      is_mandatory: row.is_mandatory !== undefined ? Boolean(row.is_mandatory) : true,
-      progress_percentage: row.progress_percentage || 0,
-      completed_at: row.completed_at,
       created_at: row.created_at,
       updated_at: row.updated_at,
       course: row.courses ? {
         id: row.courses.id,
         title: row.courses.title,
-        code: row.courses.code,
         category: row.courses.category || 'General',
         estimated_duration_minutes: row.courses.estimated_duration_minutes || 30,
-        thumbnail_url: row.courses.thumbnail_url,
-        is_active: true
+        thumbnail_url: row.courses.thumbnail_url
       } : undefined
     }));
   } catch (err) {

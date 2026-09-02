@@ -6,18 +6,21 @@ export type AdminRole = 'SUPER_ADMIN' | 'LND_ADMIN' | 'CONTENT_ADMIN' | 'REPORTI
 export interface Location {
   id: string | number;
   name: string;
-  code?: string;
   city?: string;
   state?: string;
+  country?: string;
+  is_active?: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface Role {
   id: string | number;
   name: string;
-  department?: string;
-  level?: string;
+  description?: string;
+  is_active?: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface Employee {
@@ -57,14 +60,17 @@ export interface AdminUser {
 export interface Course {
   id: string | number;
   title: string;
+  /** Not selected from Supabase (public.courses has no `code` column) — always undefined from live data, kept optional so pre-existing read-only display code that checks it stays valid. */
   code?: string;
   description?: string;
   category?: string;
   difficulty?: 'Beginner' | 'Intermediate' | 'Advanced' | string;
   estimated_duration_minutes?: number;
   thumbnail_url?: string;
-  is_active: boolean;
+  /** public.courses has no `is_active` column — `status` is the single source of truth for lifecycle state. */
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | string;
+  course_type?: string;
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
   modules_count?: number;
@@ -78,8 +84,8 @@ export interface Module {
   course_id: string | number;
   title: string;
   description?: string;
+  /** Sourced from the real DB column `sequence` (kept as `sequence_order` here since that's the app-facing name already used throughout the UI). public.modules has no is_active column. */
   sequence_order: number;
-  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
   lessons?: Lesson[];
@@ -92,13 +98,19 @@ export interface Lesson {
   id: string | number;
   module_id: string | number;
   title: string;
+  /** Sourced from the real DB column `lesson_type` (kept as `content_type` here since that's the app-facing name already used throughout the UI). */
   content_type: LessonType;
   content_text?: string;
+  /** Real DB column — public.lessons has a single `content_url`, not separate video/pdf columns. */
+  content_url?: string;
+  /** Derived from content_url when content_type === 'VIDEO'. Not a separate DB column. */
   video_url?: string;
+  /** Derived from content_url when content_type === 'PDF'. Not a separate DB column. */
   pdf_url?: string;
+  /** Sourced from the real DB column `duration_seconds` (kept as minutes here since that's the app-facing unit already used throughout the UI). */
   duration_minutes?: number;
+  /** Sourced from the real DB column `sequence` (kept as `sequence_order` here since that's the app-facing name already used throughout the UI). public.lessons has no is_active column. */
   sequence_order: number;
-  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -152,42 +164,55 @@ export interface CourseFilters {
 
 export interface CreateCourseInput {
   title: string;
-  code?: string;
   description?: string;
   category?: string;
   difficulty?: string;
   estimated_duration_minutes?: number;
   thumbnail_url?: string;
-  is_active?: boolean;
   status?: string;
 }
 
 export interface UpdateCourseInput {
   title?: string;
-  code?: string;
   description?: string;
   category?: string;
   difficulty?: string;
   estimated_duration_minutes?: number;
   thumbnail_url?: string;
-  is_active?: boolean;
   status?: string;
 }
 
-export type AssignmentStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'REVOKED';
+/** The real course_assignments.status DB enum — never write anything else. */
+export type PersistedAssignmentStatus = 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'REVOKED';
+
+/**
+ * Display/derived status used throughout the UI. Adds 'OVERDUE' on top of the
+ * persisted DB enum — OVERDUE is never a DB value, it is computed client-side
+ * from (deadline is in the past) AND (status is not COMPLETED/REVOKED), and
+ * must never be written back to course_assignments.status.
+ */
+export type AssignmentStatus = PersistedAssignmentStatus | 'OVERDUE';
 
 export interface CourseAssignment {
   id: string | number;
   course_id: string | number;
   /** employees.id UUID (FK) — NOT the employees.employee_id business code. */
   employee_id: string;
+  /** uuid FK to auth.users(id) — the assigning admin's auth user id, not their email. */
   assigned_by?: string;
   assigned_at?: string;
+  /** Sourced from the real DB column `deadline` (kept as `due_date` here since that's the app-facing name already used throughout the UI). */
   due_date?: string | null;
   status: AssignmentStatus;
+  /** NOT a persisted DB column (course_assignments has no is_mandatory field) — always defaults true client-side. */
   is_mandatory?: boolean;
+  /** NOT a persisted DB column (course_assignments has no progress_percentage field) — real-time progress is computed from lesson_progress/quiz_attempts where available, otherwise 0. */
   progress_percentage?: number;
+  /** NOT a persisted DB column (course_assignments has no completed_at field). */
   completed_at?: string | null;
+  revoked_at?: string | null;
+  /** uuid FK to auth.users(id) — the revoking admin's auth user id, not their email. */
+  revoked_by?: string;
   created_at?: string;
   updated_at?: string;
   course?: Course;

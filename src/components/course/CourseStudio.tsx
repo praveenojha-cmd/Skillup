@@ -30,7 +30,8 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
   onBack,
   existingCategories
 }) => {
-  const { role } = useAuth();
+  const { adminProfile } = useAuth();
+  const role = adminProfile?.role;
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,7 +205,7 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
   const handleTogglePublish = async () => {
     if (!course) return;
     try {
-      const willPublish = !course.is_active;
+      const willPublish = course.status !== 'PUBLISHED';
       const updated = await toggleCoursePublish(course.id, willPublish, course);
       setCourse(updated);
       showNotification(willPublish ? 'Course published successfully and ready for assignments.' : 'Course changed to DRAFT status.');
@@ -272,12 +273,12 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
                   {course.difficulty || 'Intermediate'}
                 </span>
                 <span className={`px-2.5 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1 ${
-                  course.is_active
+                  course.status === 'PUBLISHED'
                     ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                     : 'bg-amber-100 text-amber-800 border border-amber-300'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${course.is_active ? 'bg-emerald-600' : 'bg-amber-600'}`} />
-                  <span>{course.is_active ? 'PUBLISHED' : 'DRAFT'}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${course.status === 'PUBLISHED' ? 'bg-emerald-600' : 'bg-amber-600'}`} />
+                  <span>{course.status || 'DRAFT'}</span>
                 </span>
                 {course.code && (
                   <span className="font-mono text-slate-400 text-xs">
@@ -333,13 +334,13 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
                   type="button"
                   onClick={handleTogglePublish}
                   className={`px-4 py-2 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 ${
-                    course.is_active
+                    course.status === 'PUBLISHED'
                       ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
                       : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                   }`}
-                  title={!canPublish && !course.is_active ? 'Add at least 1 module and 1 lesson/quiz before publishing' : ''}
+                  title={!canPublish && course.status !== 'PUBLISHED' ? 'Add at least 1 module and 1 lesson/quiz before publishing' : ''}
                 >
-                  {course.is_active ? (
+                  {course.status === 'PUBLISHED' ? (
                     <>
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
