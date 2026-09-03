@@ -23,17 +23,24 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -74,6 +81,26 @@ fun SkillUpApp(
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val activeTab by viewModel.selectedBottomTab.collectAsState()
     val activeCert by viewModel.activeCertificate.collectAsState()
+    val isRestoringSession by viewModel.isRestoringSession.collectAsState()
+    val toastMessage by viewModel.toastMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Surface every backend/network error the ViewModel reports — this app
+    // must never silently fall back to demo data on a failure.
+    LaunchedEffect(toastMessage) {
+        val message = toastMessage
+        if (message != null) {
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearToast()
+        }
+    }
+
+    if (isRestoringSession) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = CorporateBlue)
+        }
+        return
+    }
 
     // Handle Hardware / Gesture Back Press
     BackHandler(enabled = destination !is ScreenDestination.Login) {
@@ -89,6 +116,7 @@ fun SkillUpApp(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) { data -> Snackbar(snackbarData = data) } },
         bottomBar = {
             if (showBottomBar) {
                 Surface(

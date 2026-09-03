@@ -1,6 +1,7 @@
 package com.example.data.repository
 
-import com.example.data.model.Certificate
+import android.content.Context
+import com.example.data.local.SessionStore
 import com.example.data.model.Course
 import com.example.data.model.CourseModule
 import com.example.data.model.CourseStatus
@@ -13,12 +14,49 @@ import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.model.QuizOption
 import com.example.data.model.QuizQuestion
+import com.example.data.remote.SupabaseApi
+import com.example.data.remote.SupabaseClientProvider
+import com.example.data.remote.dto.AuthErrorResponse
+import com.example.data.remote.dto.CourseAssignmentDto
+import com.example.data.remote.dto.LessonDto
+import com.example.data.remote.dto.LessonProgressUpsertDto
+import com.example.data.remote.dto.QuizQuestionRowDto
+import com.example.data.remote.dto.QuizSubmitRequestDto
+import com.example.data.remote.dto.RpcCourseIdBody
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import retrofit2.Response
 
-class LearningRepository private constructor() {
+/**
+ * Result wrapper the ViewModel uses to distinguish success from a real,
+ * user-facing failure — callers must NEVER fall back to demo/hardcoded data
+ * when this is a Failure.
+ */
+sealed class RepoResult<out T> {
+    data class Success<T>(val data: T) : RepoResult<T>()
+    data class Failure(val message: String, val cause: Throwable? = null) : RepoResult<Nothing>()
+}
+
+/**
+ * Real Supabase-backed learning data layer. Replaces the previous
+ * hardcoded/demo implementation entirely — there is no static fallback data
+ * anywhere in this file. A backend/network failure is always surfaced as a
+ * [RepoResult.Failure], never silently swapped for fake courses/questions.
+ */
+class LearningRepository private constructor(appContext: Context) {
+
+    private val sessionStore = SessionStore(appContext)
+    private val api: SupabaseApi = SupabaseClientProvider.api
+    private val moshi: Moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
 
     private val _currentUser = MutableStateFlow<Employee?>(null)
     val currentUser: StateFlow<Employee?> = _currentUser.asStateFlow()
@@ -26,690 +64,571 @@ class LearningRepository private constructor() {
     private val _courses = MutableStateFlow<List<Course>>(emptyList())
     val courses: StateFlow<List<Course>> = _courses.asStateFlow()
 
-    private val _certificates = MutableStateFlow<Map<String, Certificate>>(emptyMap())
-    val certificates: StateFlow<Map<String, Certificate>> = _certificates.asStateFlow()
-
     private val _quizAttempts = MutableStateFlow<Map<String, QuizAttempt>>(emptyMap())
     val quizAttempts: StateFlow<Map<String, QuizAttempt>> = _quizAttempts.asStateFlow()
 
-    init {
-        resetToInitialState()
-    }
+    // course_assignments.id for the currently-loaded courses, needed by the
+    // quiz submission RPC (p_assignment_id) but not part of the UI-facing
+    // Course model — kept internally, keyed by course id.
+    private val assignmentIdByCourseId = mutableMapOf<String, String>()
 
-    fun resetToInitialState() {
-        val initialEmployee = Employee(
-            id = "EMP001",
-            name = "Rahul Sharma",
-            employeeCode = "EMP001",
-            role = "Relationship Manager",
-            department = "Retail Banking & Lending",
-            location = "Bangalore",
-            coursesAssignedCount = 8,
-            coursesCompletedCount = 5,
-            inProgressCount = 2,
-            avgScorePercentage = 84
-        )
-        _currentUser.value = initialEmployee
+    private var accessToken: String? = null
 
-        val initialCourses = createInitialCourses()
-        _courses.value = initialCourses
+    // ------------------------------------------------------------------
+    // Session
+    // ------------------------------------------------------------------
 
-        // Pre-create certificate for Customer Handling Excellence (already completed)
-        val customerHandlingCert = Certificate(
-            id = "CERT-CHE-2026",
-            certificateNumber = "SKU-2026-CHE-8821",
-            courseId = "course_3",
-            courseTitle = "Customer Handling Excellence",
-            recipientName = "Rahul Sharma",
-            employeeCode = "EMP001",
-            completionDate = "15 August 2026",
-            scorePercentage = 92,
-            totalModulesCompleted = 4
-        )
-        _certificates.value = mapOf("course_3" to customerHandlingCert)
-    }
-
-    fun login(userId: String, pass: String): Boolean {
-        if (userId.trim().equals("EMP001", ignoreCase = true) && pass.trim() == "skillup123") {
-            if (_currentUser.value == null) {
-                resetToInitialState()
-            }
-            return true
+    /** Attempts to restore a previously stored session on app launch. */
+    suspend fun tryRestoreSession(): Boolean = withContext(Dispatchers.IO) {
+        val stored = sessionStore.load() ?: return@withContext false
+        accessToken = stored.accessToken
+        val resolved = resolveEmployeeAndCourses(stored.authUserId)
+        if (resolved is RepoResult.Failure) {
+            // Stored token is no longer valid (expired/revoked) — clear it
+            // and require a fresh login rather than looping on a bad token.
+            accessToken = null
+            sessionStore.clear()
+            false
+        } else {
+            true
         }
-        return false
+    }
+
+    suspend fun login(email: String, password: String): RepoResult<Unit> = withContext(Dispatchers.IO) {
+        val trimmedEmail = email.trim()
+        if (trimmedEmail.isEmpty() || password.isEmpty()) {
+            return@withContext RepoResult.Failure("Please enter both email and password.")
+        }
+        try {
+            val response = api.signInWithPassword(
+                headers = SupabaseClientProvider.anonHeaders(),
+                body = mapOf("email" to trimmedEmail, "password" to password)
+            )
+            if (!response.isSuccessful || response.body()?.accessToken == null) {
+                return@withContext RepoResult.Failure(authErrorMessage(response))
+            }
+            val body = response.body()!!
+            val authUserId = body.user?.id
+                ?: return@withContext RepoResult.Failure("Login succeeded but no user identity was returned.")
+
+            accessToken = body.accessToken
+            val resolved = resolveEmployeeAndCourses(authUserId)
+            if (resolved is RepoResult.Failure) {
+                accessToken = null
+                return@withContext resolved
+            }
+
+            sessionStore.save(body.accessToken!!, body.refreshToken, authUserId)
+            RepoResult.Success(Unit)
+        } catch (e: Exception) {
+            RepoResult.Failure("Network error while signing in: ${e.message ?: "please try again."}", e)
+        }
     }
 
     fun logout() {
+        accessToken = null
+        sessionStore.clear()
         _currentUser.value = null
+        _courses.value = emptyList()
+        _quizAttempts.value = emptyMap()
+        assignmentIdByCourseId.clear()
     }
 
-    fun getCourse(courseId: String): Course? {
-        return _courses.value.find { it.id == courseId }
-    }
+    /** Resolves the employees row for this auth user, then loads assigned courses. */
+    private suspend fun resolveEmployeeAndCourses(authUserId: String): RepoResult<Unit> {
+        val token = accessToken ?: return RepoResult.Failure("Not signed in.")
+        val headers = SupabaseClientProvider.authHeaders(token)
 
-    fun getModule(courseId: String, moduleId: String): CourseModule? {
-        return getCourse(courseId)?.modules?.find { it.id == moduleId }
-    }
-
-    fun getQuiz(quizId: String): Quiz? {
-        for (course in _courses.value) {
-            for (module in course.modules) {
-                if (module.quiz?.id == quizId) return module.quiz
-            }
+        val empResponse = try {
+            api.getEmployeeByAuthUserId(headers = headers, authUserIdEq = "eq.$authUserId")
+        } catch (e: Exception) {
+            return RepoResult.Failure("Network error while loading your profile: ${e.message ?: "please try again."}", e)
         }
-        return null
+        if (!empResponse.isSuccessful) {
+            return RepoResult.Failure(restErrorMessage(empResponse, "load your employee profile"))
+        }
+        val dto = empResponse.body()?.firstOrNull()
+            ?: return RepoResult.Failure("No employee profile is linked to this account. Contact your administrator.")
+
+        if (dto.employmentStatus != "ACTIVE") {
+            return RepoResult.Failure("Your employee profile is currently marked as INACTIVE. Learning portal access is unavailable.")
+        }
+        if (dto.skillupAccess != "ENABLED") {
+            return RepoResult.Failure("Your SkillUp learning access is currently disabled. Please contact your administrator.")
+        }
+
+        val employee = Employee(
+            id = dto.id,
+            name = dto.fullName ?: dto.email ?: "SkillUp Learner",
+            employeeCode = dto.employeeId ?: dto.id,
+            role = dto.role?.name ?: "Unassigned",
+            department = dto.role?.name ?: "—",
+            location = dto.location?.city ?: dto.location?.name ?: "—",
+            coursesAssignedCount = 0,
+            coursesCompletedCount = 0,
+            inProgressCount = 0,
+            avgScorePercentage = 0
+        )
+        _currentUser.value = employee
+
+        return loadAssignedCourses(dto.id, token)
     }
 
-    fun markModuleComplete(courseId: String, moduleId: String): Course? {
-        var updatedCourse: Course? = null
+    // ------------------------------------------------------------------
+    // Assigned courses (course_assignments + courses)
+    // ------------------------------------------------------------------
 
-        _courses.update { list ->
-            list.map { course ->
-                if (course.id != courseId) {
-                    course
-                } else {
-                    var foundCompleted = false
-                    val updatedModules = course.modules.mapIndexed { index, module ->
-                        if (module.id == moduleId) {
-                            foundCompleted = true
-                            module.copy(status = ModuleStatus.COMPLETED)
-                        } else if (foundCompleted && module.status == ModuleStatus.LOCKED) {
-                            foundCompleted = false
-                            module.copy(status = ModuleStatus.CURRENT)
-                        } else {
-                            module
-                        }
-                    }
+    /** Re-fetches the learner's assigned courses. Safe to call any time (e.g. pull-to-refresh). */
+    suspend fun refreshCourses(): RepoResult<Unit> = withContext(Dispatchers.IO) {
+        val employeeId = _currentUser.value?.id ?: return@withContext RepoResult.Failure("Not signed in.")
+        val token = accessToken ?: return@withContext RepoResult.Failure("Not signed in.")
+        loadAssignedCourses(employeeId, token)
+    }
 
-                    val completedCount = updatedModules.count { it.status == ModuleStatus.COMPLETED }
-                    val totalModules = updatedModules.size
-                    val newPercentage = if (totalModules > 0) (completedCount * 100) / totalModules else 0
+    private suspend fun loadAssignedCourses(employeeId: String, token: String): RepoResult<Unit> {
+        val headers = SupabaseClientProvider.authHeaders(token)
+        val response = try {
+            api.getMyCourseAssignments(headers = headers, employeeIdEq = "eq.$employeeId")
+        } catch (e: Exception) {
+            return RepoResult.Failure("Network error while loading your courses: ${e.message ?: "please try again."}", e)
+        }
+        if (!response.isSuccessful) {
+            return RepoResult.Failure(restErrorMessage(response, "load your assigned courses"))
+        }
 
-                    val newStatus = when {
-                        completedCount == totalModules -> CourseStatus.COMPLETED
-                        completedCount > 0 -> CourseStatus.IN_PROGRESS
-                        else -> CourseStatus.ASSIGNED
-                    }
+        val assignments = response.body().orEmpty()
+        assignmentIdByCourseId.clear()
+        val mapped = assignments.mapNotNull { assignment -> toCourse(assignment) }
+        _courses.value = mapped
 
-                    val finalCourse = course.copy(
-                        modules = updatedModules,
-                        completionPercentage = newPercentage,
-                        status = newStatus
-                    )
-                    updatedCourse = finalCourse
-                    finalCourse
+        val completed = mapped.count { it.status == CourseStatus.COMPLETED }
+        val inProgress = mapped.count { it.status == CourseStatus.IN_PROGRESS }
+        _currentUser.update { it?.copy(
+            coursesAssignedCount = mapped.size,
+            coursesCompletedCount = completed,
+            inProgressCount = inProgress
+        ) }
+
+        return RepoResult.Success(Unit)
+    }
+
+    private fun toCourse(assignment: CourseAssignmentDto): Course? {
+        val c = assignment.course ?: return null
+        assignmentIdByCourseId[c.id] = assignment.id
+        val status = when (assignment.status) {
+            "COMPLETED" -> CourseStatus.COMPLETED
+            "IN_PROGRESS" -> CourseStatus.IN_PROGRESS
+            else -> CourseStatus.ASSIGNED
+        }
+        return Course(
+            id = c.id,
+            title = c.title,
+            shortDescription = c.description.orEmpty(),
+            fullDescription = c.description.orEmpty(),
+            category = c.category ?: "General",
+            level = c.difficulty ?: "Intermediate",
+            moduleCount = 0,
+            durationMinutes = c.estimatedDurationMinutes ?: 0,
+            completionPercentage = if (status == CourseStatus.COMPLETED) 100 else 0,
+            status = status,
+            modules = emptyList()
+        )
+    }
+
+    // ------------------------------------------------------------------
+    // Course curriculum (modules -> lessons -> quiz linkage)
+    // ------------------------------------------------------------------
+
+    /**
+     * Loads the real module/lesson tree for one already-assigned course and
+     * merges it into the in-memory [courses] list. Returns the updated
+     * [Course] on success.
+     */
+    suspend fun loadCourseCurriculum(courseId: String): RepoResult<Course> = withContext(Dispatchers.IO) {
+        val token = accessToken ?: return@withContext RepoResult.Failure("Not signed in.")
+        val employeeId = _currentUser.value?.id ?: return@withContext RepoResult.Failure("Not signed in.")
+        val headers = SupabaseClientProvider.authHeaders(token)
+        val existing = _courses.value.find { it.id == courseId }
+            ?: return@withContext RepoResult.Failure("This course is not in your assigned list.")
+
+        try {
+            val modulesResp = api.getModulesForCourse(headers = headers, courseIdEq = "eq.$courseId")
+            if (!modulesResp.isSuccessful) return@withContext RepoResult.Failure(restErrorMessage(modulesResp, "load course modules"))
+            val moduleDtos = modulesResp.body().orEmpty().sortedBy { it.sequence ?: 0 }
+            if (moduleDtos.isEmpty()) {
+                val empty = existing.copy(modules = emptyList(), moduleCount = 0)
+                replaceCourse(empty)
+                return@withContext RepoResult.Success(empty)
+            }
+
+            val moduleIdsIn = "in.(${moduleDtos.joinToString(",") { it.id }})"
+            val lessonsResp = api.getLessonsForModules(headers = headers, moduleIdIn = moduleIdsIn)
+            if (!lessonsResp.isSuccessful) return@withContext RepoResult.Failure(restErrorMessage(lessonsResp, "load course lessons"))
+            val lessonDtos = lessonsResp.body().orEmpty().sortedBy { it.sequence ?: 0 }
+
+            var quizByLessonId: Map<String, com.example.data.remote.dto.QuizDto> = emptyMap()
+            if (lessonDtos.isNotEmpty()) {
+                val lessonIdsIn = "in.(${lessonDtos.joinToString(",") { it.id }})"
+                val quizzesResp = api.getQuizzesForLessons(headers = headers, lessonIdIn = lessonIdsIn)
+                if (quizzesResp.isSuccessful) {
+                    quizByLessonId = quizzesResp.body().orEmpty().associateBy { it.lessonId }
                 }
             }
-        }
 
-        updateEmployeeStats()
-        return updatedCourse
-    }
+            val progressByLessonId: Map<String, String> = if (lessonDtos.isNotEmpty()) {
+                val lessonIdsIn = "in.(${lessonDtos.joinToString(",") { it.id }})"
+                val progressResp = api.getMyLessonProgress(headers = headers, employeeIdEq = "eq.$employeeId", lessonIdIn = lessonIdsIn)
+                if (progressResp.isSuccessful) {
+                    progressResp.body().orEmpty().associate { it.lessonId to (it.status ?: "") }
+                } else emptyMap()
+            } else emptyMap()
 
-    fun submitQuizAttempt(courseId: String, quizId: String, answers: Map<String, String>): QuizAttempt {
-        val quiz = getQuiz(quizId) ?: throw IllegalArgumentException("Quiz not found")
-        var correctCount = 0
-        quiz.questions.forEach { question ->
-            if (answers[question.id] == question.correctOptionId) {
-                correctCount++
-            }
-        }
-
-        val scorePercentage = if (quiz.questions.isNotEmpty()) {
-            (correctCount * 100) / quiz.questions.size
-        } else 0
-
-        val isPassed = scorePercentage >= quiz.passingScorePercentage
-
-        val attempt = QuizAttempt(
-            quizId = quizId,
-            totalQuestions = quiz.questions.size,
-            correctAnswersCount = correctCount,
-            scorePercentage = scorePercentage,
-            isPassed = isPassed,
-            completedAt = "24 August 2026",
-            answers = answers
-        )
-
-        _quizAttempts.update { it + (quizId to attempt) }
-
-        if (isPassed) {
-            // Find module id with this quiz
-            val course = getCourse(courseId)
-            val quizModule = course?.modules?.find { it.quiz?.id == quizId }
-            if (quizModule != null) {
-                markModuleComplete(courseId, quizModule.id)
+            val lessonsByModule = lessonDtos.groupBy { it.moduleId }
+            var foundCurrent = false
+            val courseModules = moduleDtos.mapIndexed { index, m ->
+                val lessonDto = lessonsByModule[m.id]?.firstOrNull()
+                val quizDto = lessonDto?.let { quizByLessonId[it.id] }
+                val isCompleted = lessonDto != null && progressByLessonId[lessonDto.id] == "COMPLETED"
+                val moduleStatus = when {
+                    isCompleted -> ModuleStatus.COMPLETED
+                    !foundCurrent -> { foundCurrent = true; ModuleStatus.CURRENT }
+                    else -> ModuleStatus.LOCKED
+                }
+                buildModule(m, lessonDto, quizDto, moduleStatus, index + 1, moduleDtos.size)
             }
 
-            // Create certificate
-            val cert = Certificate(
-                id = "CERT-${courseId}-${System.currentTimeMillis() % 10000}",
-                certificateNumber = "SKU-2026-${courseId.uppercase()}-9401",
-                courseId = courseId,
-                courseTitle = course?.title ?: "SkillUp Course",
-                recipientName = _currentUser.value?.name ?: "Rahul Sharma",
-                employeeCode = _currentUser.value?.employeeCode ?: "EMP001",
-                completionDate = "24 August 2026",
-                scorePercentage = scorePercentage,
-                totalModulesCompleted = course?.modules?.size ?: 6
+            val completedCount = courseModules.count { it.status == ModuleStatus.COMPLETED }
+            val newPercentage = if (courseModules.isNotEmpty()) (completedCount * 100) / courseModules.size else 0
+            val newStatus = when {
+                completedCount == courseModules.size && courseModules.isNotEmpty() -> CourseStatus.COMPLETED
+                completedCount > 0 -> CourseStatus.IN_PROGRESS
+                else -> existing.status
+            }
+
+            val updated = existing.copy(
+                modules = courseModules,
+                moduleCount = courseModules.size,
+                completionPercentage = newPercentage,
+                status = newStatus
             )
-            _certificates.update { it + (courseId to cert) }
-        }
-
-        return attempt
-    }
-
-    fun getCertificate(courseId: String): Certificate? {
-        return _certificates.value[courseId]
-    }
-
-    private fun updateEmployeeStats() {
-        val courseList = _courses.value
-        val completed = courseList.count { it.status == CourseStatus.COMPLETED }
-        val inProgress = courseList.count { it.status == CourseStatus.IN_PROGRESS }
-
-        _currentUser.update { current ->
-            current?.copy(
-                coursesCompletedCount = 5 + completed - 1, // base stats
-                inProgressCount = inProgress
-            )
+            replaceCourse(updated)
+            RepoResult.Success(updated)
+        } catch (e: Exception) {
+            RepoResult.Failure("Network error while loading this course: ${e.message ?: "please try again."}", e)
         }
     }
 
-    private fun createInitialCourses(): List<Course> {
-        // Course 1: Gold Loan Product Knowledge
-        val c1m1 = CourseModule(
-            id = "c1_m1",
-            courseId = "course_1",
-            orderIndex = 1,
-            title = "1. Product Basics",
-            subtitle = "Fundamentals, collateral types & eligibility",
-            durationMinutes = 8,
-            type = LessonContentType.VIDEO,
-            status = ModuleStatus.COMPLETED,
-            lesson = Lesson(
-                id = "c1_l1",
-                moduleId = "c1_m1",
-                courseId = "course_1",
-                title = "Gold Loan Fundamentals",
-                moduleOrder = 1,
-                totalModules = 6,
-                type = LessonContentType.VIDEO,
-                durationMinutes = 8,
-                overview = "Understand why gold loans are one of the most accessible secured lending instruments for retail customers.",
-                learningObjectives = listOf(
-                    "Definition and key features of sovereign & retail gold lending",
-                    "Accepted collateral: jewelry, minted coins (up to 50g), ornaments",
-                    "Customer KYC norms & primary verification workflows"
-                ),
-                keyTakeaways = listOf(
-                    "Gold loans offer rapid disbursement with lower interest rates compared to unsecured personal credit.",
-                    "RBI guidelines strictly restrict pure gold bullion and bars from standard retail lending programs."
-                ),
-                videoTitle = "Gold Loan Essentials & Asset Class Overview",
-                videoAuthor = "Priya Mehta, Senior Credit Officer"
+    private fun buildModule(
+        m: com.example.data.remote.dto.ModuleDto,
+        lessonDto: LessonDto?,
+        quizDto: com.example.data.remote.dto.QuizDto?,
+        status: ModuleStatus,
+        moduleOrder: Int,
+        totalModules: Int
+    ): CourseModule {
+        val contentType = lessonContentType(lessonDto?.lessonType, quizDto != null)
+        val lesson = lessonDto?.let {
+            Lesson(
+                id = it.id,
+                moduleId = m.id,
+                courseId = m.courseId,
+                title = it.title,
+                moduleOrder = moduleOrder,
+                totalModules = totalModules,
+                type = contentType,
+                durationMinutes = (it.durationSeconds ?: 0) / 60,
+                overview = m.description.orEmpty(),
+                learningObjectives = emptyList(),
+                keyTakeaways = emptyList(),
+                videoTitle = if (contentType == LessonContentType.VIDEO) it.title else null,
+                videoAuthor = null,
+                documentPagesCount = 1,
+                documentSections = if (contentType == LessonContentType.PDF && !it.contentText.isNullOrBlank()) {
+                    listOf(DocumentSection(title = it.title, content = it.contentText, policyRef = null))
+                } else emptyList(),
+                articleParagraphs = if (contentType == LessonContentType.TEXT && !it.contentText.isNullOrBlank()) {
+                    listOf(it.contentText)
+                } else emptyList()
             )
+        }
+
+        val quiz = quizDto?.let {
+            Quiz(
+                id = it.id,
+                courseId = m.courseId,
+                courseTitle = "",
+                title = it.title ?: "Assessment",
+                description = "",
+                totalQuestions = 0,
+                passingScorePercentage = (it.passingScore ?: 70.0).toInt(),
+                questions = emptyList() // loaded on-demand via loadQuiz()
+            )
+        }
+
+        return CourseModule(
+            id = m.id,
+            courseId = m.courseId,
+            orderIndex = m.sequence ?: moduleOrder,
+            title = m.title,
+            subtitle = m.description ?: (if (quiz != null) "Assessment" else ""),
+            durationMinutes = lesson?.durationMinutes ?: 0,
+            type = contentType,
+            status = status,
+            lesson = if (quiz == null) lesson else null,
+            quiz = quiz
         )
+    }
 
-        val c1m2 = CourseModule(
-            id = "c1_m2",
-            courseId = "course_1",
-            orderIndex = 2,
-            title = "2. Eligibility & Policy",
-            subtitle = "Underwriting criteria & documentation",
-            durationMinutes = 10,
-            type = LessonContentType.PDF,
-            status = ModuleStatus.COMPLETED,
-            lesson = Lesson(
-                id = "c1_l2",
-                moduleId = "c1_m2",
-                courseId = "course_1",
-                title = "Eligibility & Underwriting Policy 2026",
-                moduleOrder = 2,
-                totalModules = 6,
-                type = LessonContentType.PDF,
-                durationMinutes = 10,
-                overview = "Complete breakdown of minimum customer age, occupation checks, ownership declarations, and KYC compliance guidelines.",
-                learningObjectives = listOf(
-                    "Identity and address verification requirements (PAN, Aadhaar/Passport)",
-                    "Ownership declaration documentation and legal indemnities",
-                    "Risk mitigation against stolen or encumbered jewelry"
-                ),
-                keyTakeaways = listOf(
-                    "Customer must be at least 18 years of age and the rightful owner of pledged ornaments.",
-                    "PAN is mandatory for gold loan disbursements exceeding INR 5,00,000 as per statutory guidelines."
-                ),
-                documentPagesCount = 3,
-                documentSections = listOf(
-                    DocumentSection(
-                        title = "1. Customer Qualification Standards",
-                        content = "Applicants must be resident individuals aged 18 to 70 years. Salaried, self-employed, agricultural, and homemaker profiles are eligible.",
-                        policyRef = "SEC-GL-2026/04"
-                    ),
-                    DocumentSection(
-                        title = "2. Anti-Money Laundering Safeguards",
-                        content = "Branches must perform strict CKYC validation. Third-party deposits require registered authorization and proof of relationship.",
-                        policyRef = "AML-CIR-88"
+    private fun lessonContentType(lessonType: String?, hasQuiz: Boolean): LessonContentType = when {
+        hasQuiz -> LessonContentType.QUIZ
+        lessonType.equals("VIDEO", ignoreCase = true) -> LessonContentType.VIDEO
+        lessonType.equals("PDF", ignoreCase = true) -> LessonContentType.PDF
+        else -> LessonContentType.TEXT
+    }
+
+    private fun replaceCourse(updated: Course) {
+        _courses.update { list -> list.map { if (it.id == updated.id) updated else it } }
+    }
+
+    fun getCourse(courseId: String): Course? = _courses.value.find { it.id == courseId }
+
+    // ------------------------------------------------------------------
+    // Non-quiz lesson completion (public.lesson_progress only — there is no
+    // confirmed learner WRITE policy on course_assignments, so its status is
+    // intentionally left to the quiz-submission RPC, per the verified access
+    // model. completionPercentage below is a LOCAL DISPLAY estimate only,
+    // never persisted as authoritative — the same limitation applies here as
+    // to the previous demo build, just now grounded in real lesson_progress
+    // rows instead of fake data.)
+    // ------------------------------------------------------------------
+
+    suspend fun markModuleComplete(courseId: String, moduleId: String): RepoResult<Course> = withContext(Dispatchers.IO) {
+        val token = accessToken ?: return@withContext RepoResult.Failure("Not signed in.")
+        val employeeId = _currentUser.value?.id ?: return@withContext RepoResult.Failure("Not signed in.")
+        val course = getCourse(courseId) ?: return@withContext RepoResult.Failure("Course not found.")
+        val module = course.modules.find { it.id == moduleId }
+            ?: return@withContext RepoResult.Failure("Module not found.")
+        val lesson = module.lesson ?: return@withContext RepoResult.Failure("This module has no lesson to complete.")
+
+        try {
+            val now = nowIso()
+            val headers = SupabaseClientProvider.authHeaders(token)
+            val upsertResp = api.upsertLessonProgress(
+                headers = headers,
+                body = listOf(
+                    LessonProgressUpsertDto(
+                        employeeId = employeeId,
+                        lessonId = lesson.id.toString(),
+                        status = "COMPLETED",
+                        startedAt = now,
+                        completedAt = now,
+                        updatedAt = now
                     )
                 )
             )
-        )
+            if (!upsertResp.isSuccessful) {
+                return@withContext RepoResult.Failure(restErrorMessage(upsertResp, "save your lesson progress"))
+            }
 
-        val c1m3 = CourseModule(
-            id = "c1_m3",
-            courseId = "course_1",
-            orderIndex = 3,
-            title = "3. Gold Valuation",
-            subtitle = "Karat verification, stone deduction & net weight",
-            durationMinutes = 8,
-            type = LessonContentType.TEXT,
-            status = ModuleStatus.COMPLETED,
-            lesson = Lesson(
-                id = "c1_l3",
-                moduleId = "c1_m3",
-                courseId = "course_1",
-                title = "Gold Appraisal & Net Weight Calculation",
-                moduleOrder = 3,
-                totalModules = 6,
-                type = LessonContentType.TEXT,
-                durationMinutes = 8,
-                overview = "Master the standard appraisal methods: nitric acid touchstone testing, electronic karatmeters, and precise non-gold deductions.",
-                learningObjectives = listOf(
-                    "Determining Karat purity (18K, 20K, 22K)",
-                    "Accurate gross-to-net weight deduction (gems, wax, enamel, threads)",
-                    "Calculating market value using official 30-day moving average"
-                ),
-                keyTakeaways = listOf(
-                    "LTV calculations MUST always be performed on Net Gold Weight, never on gross weight including stones.",
-                    "Minimum acceptable purity for lending programs is 18 Karat gold."
-                ),
-                articleParagraphs = listOf(
-                    "Gold valuation is the cornerstone of collateral integrity. The appraiser begins with visual hallmark verification, followed by density / touchstone checks.",
-                    "Stone weight, thread bindings, wax fillings, and enamel coatings must be weighed and deducted with zero margin for error.",
-                    "Once net weight in grams is established, it is multiplied by the system's prevailing rate for that specific karat rating."
+            // Reflect completion locally (module/course progress) — this is
+            // a display estimate; see class-level note above.
+            var foundCompleted = false
+            val updatedModules = course.modules.map { m ->
+                if (m.id == moduleId) {
+                    foundCompleted = true
+                    m.copy(status = ModuleStatus.COMPLETED)
+                } else if (foundCompleted && m.status == ModuleStatus.LOCKED) {
+                    foundCompleted = false
+                    m.copy(status = ModuleStatus.CURRENT)
+                } else m
+            }
+            val completedCount = updatedModules.count { it.status == ModuleStatus.COMPLETED }
+            val newPercentage = if (updatedModules.isNotEmpty()) (completedCount * 100) / updatedModules.size else 0
+            val newStatus = when {
+                completedCount == updatedModules.size -> CourseStatus.COMPLETED
+                completedCount > 0 -> CourseStatus.IN_PROGRESS
+                else -> CourseStatus.ASSIGNED
+            }
+            val updatedCourse = course.copy(
+                modules = updatedModules,
+                completionPercentage = newPercentage,
+                status = newStatus
+            )
+            replaceCourse(updatedCourse)
+            RepoResult.Success(updatedCourse)
+        } catch (e: Exception) {
+            RepoResult.Failure("Network error while saving your progress: ${e.message ?: "please try again."}", e)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Quiz — questions loaded via the secure RPC (never quiz_options directly)
+    // ------------------------------------------------------------------
+
+    suspend fun loadQuizForCourse(courseId: String, quizId: String): RepoResult<Quiz> = withContext(Dispatchers.IO) {
+        val token = accessToken ?: return@withContext RepoResult.Failure("Not signed in.")
+        val course = getCourse(courseId) ?: return@withContext RepoResult.Failure("Course not found.")
+        val quizStub = course.modules.firstNotNullOfOrNull { it.quiz?.takeIf { q -> q.id == quizId } }
+            ?: return@withContext RepoResult.Failure("Quiz not found in this course.")
+
+        try {
+            val headers = SupabaseClientProvider.authHeaders(token)
+            val response = api.getCourseQuizQuestions(headers = headers, body = RpcCourseIdBody(courseId = courseId))
+            if (!response.isSuccessful) {
+                return@withContext RepoResult.Failure(rpcErrorMessage(response, "load quiz questions"))
+            }
+            val rows: List<QuizQuestionRowDto> = response.body().orEmpty().filter { it.quizId == quizId }
+            if (rows.isEmpty()) {
+                return@withContext RepoResult.Failure("This quiz currently has no questions configured.")
+            }
+
+            val questions = rows.groupBy { it.questionId }
+                .entries
+                .sortedBy { it.value.first().questionSequence ?: 0 }
+                .mapIndexed { idx, (questionId, optionRows) ->
+                    val first = optionRows.first()
+                    QuizQuestion(
+                        id = questionId,
+                        questionNumber = idx + 1,
+                        questionText = first.questionText,
+                        options = optionRows
+                            .sortedBy { it.optionSequence ?: 0 }
+                            .mapIndexed { optIdx, row ->
+                                QuizOption(
+                                    id = row.optionId,
+                                    label = ('A' + optIdx).toString(),
+                                    text = row.optionText
+                                )
+                            },
+                        // The learner-safe RPC never returns is_correct — this
+                        // is intentionally left blank; the server, not this
+                        // app, is authoritative on correctness (see
+                        // submitQuiz()). No UI in this app should ever read
+                        // this field to grade an answer locally.
+                        correctOptionId = "",
+                        explanation = ""
+                    )
+                }
+
+            RepoResult.Success(quizStub.copy(totalQuestions = questions.size, questions = questions))
+        } catch (e: Exception) {
+            RepoResult.Failure("Network error while loading the quiz: ${e.message ?: "please try again."}", e)
+        }
+    }
+
+    /**
+     * Submits answers to the server-authoritative RPC. [answers] maps
+     * questionId -> selected optionId (single-select, matching the current
+     * Android QuizScreen model). Android performs NO local scoring.
+     */
+    suspend fun submitQuizAttempt(
+        courseId: String,
+        quizId: String,
+        answers: Map<String, String>
+    ): RepoResult<QuizAttempt> = withContext(Dispatchers.IO) {
+        val token = accessToken ?: return@withContext RepoResult.Failure("Not signed in.")
+        val assignmentId = assignmentIdByCourseId[courseId]
+            ?: return@withContext RepoResult.Failure("No active assignment found for this course.")
+
+        try {
+            val headers = SupabaseClientProvider.authHeaders(token)
+            val response = api.submitQuizAttempt(
+                headers = headers,
+                body = QuizSubmitRequestDto(
+                    quizId = quizId,
+                    courseId = courseId,
+                    assignmentId = assignmentId,
+                    answers = answers
                 )
             )
-        )
+            if (!response.isSuccessful || response.body() == null) {
+                return@withContext RepoResult.Failure(rpcErrorMessage(response, "submit your quiz"))
+            }
+            val result = response.body()!!
 
-        val c1m4 = CourseModule(
-            id = "c1_m4",
-            courseId = "course_1",
-            orderIndex = 4,
-            title = "4. LTV & Pricing",
-            subtitle = "Loan-to-Value formula, schemes & pricing limits",
-            durationMinutes = 10,
-            type = LessonContentType.VIDEO,
-            status = ModuleStatus.CURRENT,
-            lesson = Lesson(
-                id = "c1_l4",
-                moduleId = "c1_m4",
-                courseId = "course_1",
-                title = "LTV & Pricing Masterclass",
-                moduleOrder = 4,
-                totalModules = 6,
-                type = LessonContentType.VIDEO,
-                durationMinutes = 10,
-                overview = "Deep dive into Loan-to-Value (LTV) regulatory caps, interest rate slabs, and pricing calculations for customer proposals.",
-                learningObjectives = listOf(
-                    "How LTV is calculated based on net collateral valuation",
-                    "Applicable limits: RBI regulatory ceiling of 75% LTV",
-                    "Common pricing scenarios (Bullet repayment vs Monthly interest schemes)",
-                    "Common pricing mistakes and risk buffers during market volatility"
-                ),
-                keyTakeaways = listOf(
-                    "LTV (Loan-to-Value) = (Sanctioned Loan Amount ÷ Collateral Market Value) × 100.",
-                    "The statutory maximum LTV for retail gold lending in India is capped at 75% at origination.",
-                    "Lower LTV brackets (e.g. 50-60%) qualify customers for preferential, discounted interest rates."
-                ),
-                videoTitle = "LTV Optimization & Scheme Structuring",
-                videoAuthor = "Vikram Aditya, Head of Retail Products"
+            val attempt = QuizAttempt(
+                quizId = quizId,
+                totalQuestions = result.maxScore,
+                correctAnswersCount = result.score,
+                scorePercentage = result.percentage,
+                isPassed = result.passed,
+                completedAt = nowIso(),
+                answers = answers
             )
-        )
+            _quizAttempts.update { it + (quizId to attempt) }
 
-        val c1m5 = CourseModule(
-            id = "c1_m5",
-            courseId = "course_1",
-            orderIndex = 5,
-            title = "5. Customer Scenarios",
-            subtitle = "Handling prepayments, rollovers & margin calls",
-            durationMinutes = 9,
-            type = LessonContentType.PDF,
-            status = ModuleStatus.LOCKED,
-            lesson = Lesson(
-                id = "c1_l5",
-                moduleId = "c1_m5",
-                courseId = "course_1",
-                title = "Real-World Customer Scenarios & Edge Cases",
-                moduleOrder = 5,
-                totalModules = 6,
-                type = LessonContentType.PDF,
-                durationMinutes = 9,
-                overview = "Practical guide to managing customer requests across loan lifecycles: partial releases, tenure renewals, and margin call communications.",
-                learningObjectives = listOf(
-                    "Procedures for partial release of gold ornaments upon milestone payment",
-                    "Conducting polite, legally compliant margin call communications if gold prices decline",
-                    "Customer handover protocols and safe vault reconciliation"
-                ),
-                keyTakeaways = listOf(
-                    "Prompt, empathetic communication during price corrections preserves customer retention while safeguarding book quality.",
-                    "Two authorized officers must witness and sign off on vault releases."
-                ),
-                documentPagesCount = 2,
-                documentSections = listOf(
-                    DocumentSection(
-                        title = "1. Margin Call Protocol",
-                        content = "If LTV breaches 85% due to price drops, the system triggers automated advisory SMS and email notices. Relationship Managers have 48 hours to engage.",
-                        policyRef = "RISK-MC-09"
-                    ),
-                    DocumentSection(
-                        title = "2. Partial Release Workflow",
-                        content = "Customer must pay down proportional principal so remaining collateral satisfies the <=75% LTV requirement.",
-                        policyRef = "OPS-PR-14"
+            // Reflect the server's authoritative progress/completion in the
+            // in-memory course — courseProgressUpdated/isCourseCompleted come
+            // directly from the RPC response, never recomputed locally.
+            getCourse(courseId)?.let { course ->
+                val newStatus = if (result.isCourseCompleted == true) CourseStatus.COMPLETED else CourseStatus.IN_PROGRESS
+                replaceCourse(
+                    course.copy(
+                        completionPercentage = result.courseProgressUpdated ?: course.completionPercentage,
+                        status = newStatus
                     )
                 )
-            )
-        )
+            }
 
-        val c1Quiz = Quiz(
-            id = "quiz_gold_loan",
-            courseId = "course_1",
-            courseTitle = "Gold Loan Product Knowledge",
-            title = "Final Assessment: Gold Loan Mastery",
-            description = "Test your comprehensive knowledge across LTV, collateral appraisal, underwriting guidelines, and regulatory compliance.",
-            totalQuestions = 5,
-            passingScorePercentage = 70,
-            questions = listOf(
-                QuizQuestion(
-                    id = "q1",
-                    questionNumber = 1,
-                    questionText = "What does LTV represent in gold loan lending?",
-                    options = listOf(
-                        QuizOption("opt_1a", "A", "Loan-to-Value: Ratio of loan sanctioned to collateral market value"),
-                        QuizOption("opt_1b", "B", "Lifetime Value: Expected total revenue generated from the customer"),
-                        QuizOption("opt_1c", "C", "Legal Tenure Validity: Maximum allowable duration before auction"),
-                        QuizOption("opt_1d", "D", "Liquidity Target Valuation: Minimum daily branch cash reserve")
-                    ),
-                    correctOptionId = "opt_1a",
-                    explanation = "LTV stands for Loan-to-Value, which is the percentage ratio between the sanctioned loan amount and the verified market value of the net gold collateral."
-                ),
-                QuizQuestion(
-                    id = "q2",
-                    questionNumber = 2,
-                    questionText = "What is the maximum regulatory LTV cap mandated by RBI for retail gold loans at origination?",
-                    options = listOf(
-                        QuizOption("opt_2a", "A", "50%"),
-                        QuizOption("opt_2b", "B", "65%"),
-                        QuizOption("opt_2c", "C", "75%"),
-                        QuizOption("opt_2d", "D", "90%")
-                    ),
-                    correctOptionId = "opt_2c",
-                    explanation = "Under RBI regulatory norms, the maximum loan-to-value (LTV) allowed for retail gold loans at the time of sanction is 75%."
-                ),
-                QuizQuestion(
-                    id = "q3",
-                    questionNumber = 3,
-                    questionText = "When calculating net gold weight for loan sanction, which of the following MUST be deducted?",
-                    options = listOf(
-                        QuizOption("opt_3a", "A", "Precious stones, wax fillings, enamel, and non-gold threads"),
-                        QuizOption("opt_3b", "B", "A mandatory 20% standard depreciation fee on all ornaments"),
-                        QuizOption("opt_3c", "C", "Making charges previously incurred by the customer"),
-                        QuizOption("opt_3d", "D", "GST paid at the time of original purchase")
-                    ),
-                    correctOptionId = "opt_3a",
-                    explanation = "Only pure net gold content can be collateralized. All non-gold elements such as embedded gemstones, lac/wax, and threads must be deducted."
-                ),
-                QuizQuestion(
-                    id = "q4",
-                    questionNumber = 4,
-                    questionText = "What is the minimum acceptable gold purity standard for retail gold loan programs?",
-                    options = listOf(
-                        QuizOption("opt_4a", "A", "14 Karat"),
-                        QuizOption("opt_4b", "B", "18 Karat"),
-                        QuizOption("opt_4c", "C", "22 Karat"),
-                        QuizOption("opt_4d", "D", "24 Karat only")
-                    ),
-                    correctOptionId = "opt_4b",
-                    explanation = "The standard institutional benchmark requires a minimum purity of 18 Karat (75.0% pure gold) for collateral acceptance."
-                ),
-                QuizQuestion(
-                    id = "q5",
-                    questionNumber = 5,
-                    questionText = "If a customer repays a portion of the loan and requests partial release of ornaments, what condition must be met?",
-                    options = listOf(
-                        QuizOption("opt_5a", "A", "The customer must pay a 5% prepayment penalty"),
-                        QuizOption("opt_5b", "B", "Remaining collateral value must still satisfy the required LTV ratio (<=75%)"),
-                        QuizOption("opt_5c", "C", "All ornaments must remain locked until 100% full closure"),
-                        QuizOption("opt_5d", "D", "Customer must pledge a secondary personal guarantee")
-                    ),
-                    correctOptionId = "opt_5b",
-                    explanation = "Partial releases are permitted as long as the market value of the retained gold collateral continues to comfortably satisfy the maximum allowable LTV threshold."
-                )
-            )
-        )
+            RepoResult.Success(attempt)
+        } catch (e: Exception) {
+            RepoResult.Failure("Network error while submitting your quiz: ${e.message ?: "please try again."}", e)
+        }
+    }
 
-        val c1m6 = CourseModule(
-            id = "c1_m6",
-            courseId = "course_1",
-            orderIndex = 6,
-            title = "6. Final Assessment",
-            subtitle = "5 Questions • Passing Score 70%",
-            durationMinutes = 5,
-            type = LessonContentType.QUIZ,
-            status = ModuleStatus.LOCKED,
-            quiz = c1Quiz
-        )
+    fun getQuizAttempt(quizId: String): QuizAttempt? = _quizAttempts.value[quizId]
 
-        val course1 = Course(
-            id = "course_1",
-            title = "Gold Loan Product Knowledge",
-            shortDescription = "Complete guide on gold loan fundamentals, valuation, underwriting, LTV & pricing.",
-            fullDescription = "Build strong product knowledge covering gold loan fundamentals, eligibility, valuation, LTV, pricing and customer scenarios.",
-            category = "Product & Credit",
-            level = "Core Intermediate",
-            moduleCount = 6,
-            durationMinutes = 45,
-            completionPercentage = 65,
-            status = CourseStatus.IN_PROGRESS,
-            modules = listOf(c1m1, c1m2, c1m3, c1m4, c1m5, c1m6),
-            finalQuizId = "quiz_gold_loan"
-        )
+    // ------------------------------------------------------------------
+    // Error message helpers — never leak raw SQL/RPC internals to the UI.
+    // ------------------------------------------------------------------
 
-        // Course 2: Sales Excellence
-        val c2m1 = CourseModule(
-            id = "c2_m1",
-            courseId = "course_2",
-            orderIndex = 1,
-            title = "1. Consultative Sales Mindset",
-            subtitle = "Building high-trust customer relationships",
-            durationMinutes = 8,
-            type = LessonContentType.VIDEO,
-            status = ModuleStatus.CURRENT,
-            lesson = Lesson(
-                id = "c2_l1",
-                moduleId = "c2_m1",
-                courseId = "course_2",
-                title = "The Consultative Sales Mindset",
-                moduleOrder = 1,
-                totalModules = 5,
-                type = LessonContentType.VIDEO,
-                durationMinutes = 8,
-                overview = "Transition from transactional selling to becoming a trusted financial advisor for high-net-worth and retail clients.",
-                learningObjectives = listOf(
-                    "Diagnosing customer liquidity needs with open-ended probing",
-                    "Positioning interest savings vs unsecured personal loans",
-                    "Structuring transparent loan proposals without hidden costs"
-                ),
-                keyTakeaways = listOf(
-                    "High-performing Relationship Managers listen 70% of the time and pitch tailored solutions 30% of the time."
-                ),
-                videoTitle = "Consultative Selling & Client Discovery",
-                videoAuthor = "Ananya Sen, VP of Retail Sales"
-            )
-        )
-        val c2m2 = CourseModule(
-            id = "c2_m2",
-            courseId = "course_2",
-            orderIndex = 2,
-            title = "2. Pitching Value Propositions",
-            subtitle = "Framing speed, security & flexibility",
-            durationMinutes = 8,
-            type = LessonContentType.TEXT,
-            status = ModuleStatus.LOCKED
-        )
-        val c2m3 = CourseModule(
-            id = "c2_m3",
-            courseId = "course_2",
-            orderIndex = 3,
-            title = "3. Objection Handling",
-            subtitle = "Overcoming rate, safety & stigma hurdles",
-            durationMinutes = 10,
-            type = LessonContentType.PDF,
-            status = ModuleStatus.LOCKED
-        )
-        val c2m4 = CourseModule(
-            id = "c2_m4",
-            courseId = "course_2",
-            orderIndex = 4,
-            title = "4. Closing & Referral Loops",
-            subtitle = "Securing commitments & client advocacy",
-            durationMinutes = 8,
-            type = LessonContentType.VIDEO,
-            status = ModuleStatus.LOCKED
-        )
-        val c2m5 = CourseModule(
-            id = "c2_m5",
-            courseId = "course_2",
-            orderIndex = 5,
-            title = "5. Sales Certification Quiz",
-            subtitle = "5 Questions • Passing Score 70%",
-            durationMinutes = 6,
-            type = LessonContentType.QUIZ,
-            status = ModuleStatus.LOCKED
-        )
+    private fun authErrorMessage(response: Response<*>): String {
+        val raw = response.errorBody()?.string()
+        val parsed = raw?.let {
+            try { moshi.adapter(AuthErrorResponse::class.java).fromJson(it) } catch (_: Exception) { null }
+        }
+        val detail = parsed?.errorDescription ?: parsed?.msg ?: parsed?.message
+        return when (response.code()) {
+            400, 401 -> "Invalid email or password."
+            else -> detail ?: "Sign-in failed (HTTP ${response.code()}). Please try again."
+        }
+    }
 
-        val course2 = Course(
-            id = "course_2",
-            title = "Sales Excellence",
-            shortDescription = "Master consultative selling, high-conversion pitching and relationship building.",
-            fullDescription = "Sharpen your client engagement, objection handling, and pipeline velocity with structured sales frameworks.",
-            category = "Sales & Growth",
-            level = "Advanced",
-            moduleCount = 5,
-            durationMinutes = 40,
-            completionPercentage = 0,
-            status = CourseStatus.ASSIGNED,
-            modules = listOf(c2m1, c2m2, c2m3, c2m4, c2m5)
-        )
+    private fun restErrorMessage(response: Response<*>, action: String): String = when (response.code()) {
+        401 -> "Your session has expired. Please sign in again."
+        403 -> "You don't have access to $action."
+        404 -> "The requested data could not be found."
+        in 500..599 -> "The server is temporarily unavailable. Please try again shortly."
+        else -> "Unable to $action (HTTP ${response.code()}). Please try again."
+    }
 
-        // Course 3: Customer Handling Excellence (100% Complete)
-        val c3m1 = CourseModule(
-            id = "c3_m1", courseId = "course_3", orderIndex = 1,
-            title = "1. Active Empathy in Banking", subtitle = "De-escalation and positive phrasing",
-            durationMinutes = 8, type = LessonContentType.VIDEO, status = ModuleStatus.COMPLETED
-        )
-        val c3m2 = CourseModule(
-            id = "c3_m2", courseId = "course_3", orderIndex = 2,
-            title = "2. Turnaround Time Management", subtitle = "Process optimization under SLA",
-            durationMinutes = 9, type = LessonContentType.PDF, status = ModuleStatus.COMPLETED
-        )
-        val c3m3 = CourseModule(
-            id = "c3_m3", courseId = "course_3", orderIndex = 3,
-            title = "3. Escalation Resolution Matrix", subtitle = "Multi-tier grievance handling",
-            durationMinutes = 10, type = LessonContentType.TEXT, status = ModuleStatus.COMPLETED
-        )
-        val c3m4 = CourseModule(
-            id = "c3_m4", courseId = "course_3", orderIndex = 4,
-            title = "4. Assessment & Certification", subtitle = "Passed with 92% score",
-            durationMinutes = 8, type = LessonContentType.QUIZ, status = ModuleStatus.COMPLETED
-        )
+    private fun rpcErrorMessage(response: Response<*>, action: String): String {
+        if (response.code() == 401) return "Your session has expired. Please sign in again."
+        if (response.code() == 403) {
+            val raw = response.errorBody()?.string().orEmpty()
+            return when {
+                raw.contains("attempt", ignoreCase = true) -> "You have used all allowed attempts for this quiz."
+                raw.contains("assignment", ignoreCase = true) -> "You do not have an active assignment for this course."
+                raw.contains("active", ignoreCase = true) -> "Your learning access is not currently active."
+                else -> "You don't have access to $action."
+            }
+        }
+        return "Unable to $action (HTTP ${response.code()}). Please try again."
+    }
 
-        val course3 = Course(
-            id = "course_3",
-            title = "Customer Handling Excellence",
-            shortDescription = "Exemplary customer support, conflict resolution and branch service standards.",
-            fullDescription = "Learn enterprise service standards, active listening, grievance redressing, and positive customer loyalty loops.",
-            category = "Customer Experience",
-            level = "Foundational",
-            moduleCount = 4,
-            durationMinutes = 35,
-            completionPercentage = 100,
-            status = CourseStatus.COMPLETED,
-            modules = listOf(c3m1, c3m2, c3m3, c3m4),
-            certificateId = "CERT-CHE-2026"
-        )
-
-        // Course 4: Collections & Retention
-        val c4m1 = CourseModule(
-            id = "c4_m1", courseId = "course_4", orderIndex = 1,
-            title = "1. Fair Practice Code & Ethics", subtitle = "RBI compliance on debt recovery",
-            durationMinutes = 10, type = LessonContentType.PDF, status = ModuleStatus.COMPLETED
-        )
-        val c4m2 = CourseModule(
-            id = "c4_m2", courseId = "course_4", orderIndex = 2,
-            title = "2. Early Delinquency Triggers", subtitle = "Behavioral telemetry & early alerts",
-            durationMinutes = 10, type = LessonContentType.TEXT, status = ModuleStatus.COMPLETED
-        )
-        val c4m3 = CourseModule(
-            id = "c4_m3", courseId = "course_4", orderIndex = 3,
-            title = "3. Restructuring & Retention", subtitle = "EMI rescheduling & grace period norms",
-            durationMinutes = 10, type = LessonContentType.VIDEO, status = ModuleStatus.CURRENT,
-            lesson = Lesson(
-                id = "c4_l3",
-                moduleId = "c4_m3",
-                courseId = "course_4",
-                title = "Restructuring & Retention Best Practices",
-                moduleOrder = 3,
-                totalModules = 5,
-                type = LessonContentType.VIDEO,
-                durationMinutes = 10,
-                overview = "How to help stressed borrowers navigate temporary cash-flow challenges while maintaining portfolio quality.",
-                learningObjectives = listOf(
-                    "Assessing genuine borrower distress vs intentional default",
-                    "Flexible interest capitalization models within credit policy",
-                    "Conducting respectful negotiation conversations"
-                ),
-                keyTakeaways = listOf(
-                    "Customer retention through timely restructuring reduces long-term NPA provisions by over 40%."
-                ),
-                videoTitle = "Restructuring Strategies in Volatile Markets",
-                videoAuthor = "Suresh N., Chief Risk Officer"
-            )
-        )
-        val c4m4 = CourseModule(
-            id = "c4_m4", courseId = "course_4", orderIndex = 4,
-            title = "4. Notice & Auction Protocols", subtitle = "Legal timeline and documentation",
-            durationMinutes = 12, type = LessonContentType.PDF, status = ModuleStatus.LOCKED
-        )
-        val c4m5 = CourseModule(
-            id = "c4_m5", courseId = "course_4", orderIndex = 5,
-            title = "5. Retention Final Assessment", subtitle = "5 Questions • Passing Score 70%",
-            durationMinutes = 8, type = LessonContentType.QUIZ, status = ModuleStatus.LOCKED
-        )
-
-        val course4 = Course(
-            id = "course_4",
-            title = "Collections & Retention",
-            shortDescription = "Compliant debt recovery, customer rehabilitation and risk containment.",
-            fullDescription = "Comprehensive training on respectful collection methods, NPA prevention, loan restructuring and legal notice frameworks.",
-            category = "Risk & Operations",
-            level = "Advanced",
-            moduleCount = 5,
-            durationMinutes = 50,
-            completionPercentage = 30,
-            status = CourseStatus.IN_PROGRESS,
-            modules = listOf(c4m1, c4m2, c4m3, c4m4, c4m5)
-        )
-
-        return listOf(course1, course2, course3, course4)
+    private fun nowIso(): String {
+        val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        fmt.timeZone = TimeZone.getTimeZone("UTC")
+        return fmt.format(java.util.Date())
     }
 
     companion object {
         @Volatile
         private var instance: LearningRepository? = null
 
-        fun getInstance(): LearningRepository {
+        fun getInstance(context: Context): LearningRepository {
             return instance ?: synchronized(this) {
-                instance ?: LearningRepository().also { instance = it }
+                instance ?: LearningRepository(context.applicationContext).also { instance = it }
             }
         }
     }

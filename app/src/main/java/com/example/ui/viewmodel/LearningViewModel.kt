@@ -1,17 +1,16 @@
 package com.example.ui.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.Certificate
 import com.example.data.model.Course
 import com.example.data.model.CourseModule
-import com.example.data.model.CourseStatus
 import com.example.data.model.Employee
-import com.example.data.model.Lesson
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.repository.LearningRepository
-import kotlinx.coroutines.delay
+import com.example.data.repository.RepoResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -47,12 +46,14 @@ data class QuizUiState(
     val isAnswerCorrect: Boolean = false,
     val userAnswers: Map<String, String> = emptyMap(),
     val quizAttempt: QuizAttempt? = null,
-    val isFinished: Boolean = false
+    val isFinished: Boolean = false,
+    val isLoading: Boolean = false,
+    val isSubmitting: Boolean = false
 )
 
-class LearningViewModel(
-    private val repository: LearningRepository = LearningRepository.getInstance()
-) : ViewModel() {
+class LearningViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val repository: LearningRepository = LearningRepository.getInstance(application)
 
     // Current navigation destination
     private val _currentDestination = MutableStateFlow<ScreenDestination>(ScreenDestination.Login)
@@ -68,6 +69,18 @@ class LearningViewModel(
 
     val allCourses: StateFlow<List<Course>> = repository.courses
 
+    // True while a session-restore / initial data load is in flight — the
+    // splash/loading state shown before we know whether to route to Login
+    // or Home.
+    private val _isRestoringSession = MutableStateFlow(true)
+    val isRestoringSession: StateFlow<Boolean> = _isRestoringSession.asStateFlow()
+
+    private val _isLoadingCourses = MutableStateFlow(false)
+    val isLoadingCourses: StateFlow<Boolean> = _isLoadingCourses.asStateFlow()
+
+    private val _isLoadingCourseDetail = MutableStateFlow(false)
+    val isLoadingCourseDetail: StateFlow<Boolean> = _isLoadingCourseDetail.asStateFlow()
+
     // Selected Bottom Navigation Tab (0: Home, 1: My Courses, 2: Profile)
     private val _selectedBottomTab = MutableStateFlow(0)
     val selectedBottomTab: StateFlow<Int> = _selectedBottomTab.asStateFlow()
@@ -80,11 +93,11 @@ class LearningViewModel(
     private val _courseSearchQuery = MutableStateFlow("")
     val courseSearchQuery: StateFlow<String> = _courseSearchQuery.asStateFlow()
 
-    // Login Form State
-    private val _loginUserId = MutableStateFlow("EMP001")
-    val loginUserId: StateFlow<String> = _loginUserId.asStateFlow()
+    // Login Form State — real Supabase Auth email/password, no demo defaults.
+    private val _loginEmail = MutableStateFlow("")
+    val loginEmail: StateFlow<String> = _loginEmail.asStateFlow()
 
-    private val _loginPassword = MutableStateFlow("skillup123")
+    private val _loginPassword = MutableStateFlow("")
     val loginPassword: StateFlow<String> = _loginPassword.asStateFlow()
 
     private val _loginError = MutableStateFlow<String?>(null)
@@ -113,9 +126,26 @@ class LearningViewModel(
     private val _activeCertificate = MutableStateFlow<Certificate?>(null)
     val activeCertificate: StateFlow<Certificate?> = _activeCertificate.asStateFlow()
 
-    // General user feedback / snackbars
+    // General user feedback / error surface. Every backend failure this
+    // ViewModel encounters is routed here — the UI must show this, never
+    // silently substitute demo data.
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _isRestoringSession.value = true
+            val restored = repository.tryRestoreSession()
+            _isRestoringSession.value = false
+            if (restored) {
+                navBackstack.clear()
+                _selectedBottomTab.value = 0
+                _currentDestination.value = ScreenDestination.Home
+            } else {
+                _currentDestination.value = ScreenDestination.Login
+            }
+        }
+    }
 
     fun navigateTo(destination: ScreenDestination) {
         if (_currentDestination.value != destination) {
@@ -149,8 +179,8 @@ class LearningViewModel(
         }
     }
 
-    fun onUserIdChange(value: String) {
-        _loginUserId.value = value
+    fun onEmailChange(value: String) {
+        _loginEmail.value = value
         _loginError.value = null
     }
 
@@ -159,27 +189,21 @@ class LearningViewModel(
         _loginError.value = null
     }
 
-    fun autofillDemoCredentials() {
-        _loginUserId.value = "EMP001"
-        _loginPassword.value = "skillup123"
-        _loginError.value = null
-    }
-
     fun performLogin() {
         viewModelScope.launch {
             _isLoggingIn.value = true
             _loginError.value = null
-            delay(400) // Realistic UI response
-
-            val success = repository.login(_loginUserId.value, _loginPassword.value)
-            _isLoggingIn.value = false
-            if (success) {
-                navBackstack.clear()
-                _selectedBottomTab.value = 0
-                _currentDestination.value = ScreenDestination.Home
-            } else {
-                _loginError.value = "Invalid credentials. Use EMP001 / skillup123 for sample access."
+            when (val result = repository.login(_loginEmail.value, _loginPassword.value)) {
+                is RepoResult.Success -> {
+                    navBackstack.clear()
+                    _selectedBottomTab.value = 0
+                    _currentDestination.value = ScreenDestination.Home
+                }
+                is RepoResult.Failure -> {
+                    _loginError.value = result.message
+                }
             }
+            _isLoggingIn.value = false
         }
     }
 
@@ -187,6 +211,17 @@ class LearningViewModel(
         repository.logout()
         navBackstack.clear()
         _currentDestination.value = ScreenDestination.Login
+    }
+
+    fun refreshCourses() {
+        viewModelScope.launch {
+            _isLoadingCourses.value = true
+            val result = repository.refreshCourses()
+            _isLoadingCourses.value = false
+            if (result is RepoResult.Failure) {
+                _toastMessage.value = result.message
+            }
+        }
     }
 
     fun selectCourseTab(tab: CourseTab) {
@@ -200,6 +235,14 @@ class LearningViewModel(
     fun openCourseDetails(courseId: String) {
         _currentCourseId.value = courseId
         navigateTo(ScreenDestination.CourseDetails(courseId))
+        viewModelScope.launch {
+            _isLoadingCourseDetail.value = true
+            val result = repository.loadCourseCurriculum(courseId)
+            _isLoadingCourseDetail.value = false
+            if (result is RepoResult.Failure) {
+                _toastMessage.value = result.message
+            }
+        }
     }
 
     fun openModule(courseId: String, module: CourseModule) {
@@ -217,32 +260,41 @@ class LearningViewModel(
         val cId = _currentCourseId.value ?: return
         val mId = _currentModuleId.value ?: return
 
-        val updatedCourse = repository.markModuleComplete(cId, mId)
-        _toastMessage.value = "Module marked complete! Next module unlocked."
-
-        // Check if course completed
-        if (updatedCourse != null && updatedCourse.completionPercentage == 100) {
-            navigateTo(ScreenDestination.CourseCompletion(cId, 90))
-        } else {
-            // Return to Course Details so user sees updated progress & unlocked next module
-            navigateBack()
+        viewModelScope.launch {
+            when (val result = repository.markModuleComplete(cId, mId)) {
+                is RepoResult.Success -> {
+                    val updatedCourse = result.data
+                    _toastMessage.value = "Module marked complete! Next module unlocked."
+                    if (updatedCourse.completionPercentage == 100) {
+                        navigateTo(ScreenDestination.CourseCompletion(cId, 100))
+                    } else {
+                        navigateBack()
+                    }
+                }
+                is RepoResult.Failure -> {
+                    _toastMessage.value = result.message
+                }
+            }
         }
     }
 
     fun startQuiz(courseId: String, quizId: String) {
         _currentCourseId.value = courseId
-        val quiz = repository.getQuiz(quizId)
-        _quizState.value = QuizUiState(
-            quiz = quiz,
-            currentQuestionIndex = 0,
-            selectedOptionId = null,
-            isAnswerSubmitted = false,
-            isAnswerCorrect = false,
-            userAnswers = emptyMap(),
-            quizAttempt = null,
-            isFinished = false
-        )
+        _quizState.value = QuizUiState(isLoading = true)
         navigateTo(ScreenDestination.QuizView(courseId, quizId))
+
+        viewModelScope.launch {
+            when (val result = repository.loadQuizForCourse(courseId, quizId)) {
+                is RepoResult.Success -> {
+                    _quizState.value = QuizUiState(quiz = result.data, isLoading = false)
+                }
+                is RepoResult.Failure -> {
+                    _quizState.value = QuizUiState(isLoading = false)
+                    _toastMessage.value = result.message
+                    navigateBack()
+                }
+            }
+        }
     }
 
     fun selectQuizOption(optionId: String) {
@@ -251,19 +303,24 @@ class LearningViewModel(
         }
     }
 
+    /**
+     * Locally advances the on-screen "was this option highlighted" state
+     * only — this is NOT scoring. Correctness is determined exclusively by
+     * the server when the full quiz is submitted in [nextQuizQuestion]'s
+     * final-question branch.
+     */
     fun submitCurrentQuizAnswer() {
         val state = _quizState.value
         val quiz = state.quiz ?: return
         val currentQ = quiz.questions.getOrNull(state.currentQuestionIndex) ?: return
         val selectedOpt = state.selectedOptionId ?: return
 
-        val isCorrect = selectedOpt == currentQ.correctOptionId
         val updatedAnswers = state.userAnswers + (currentQ.id to selectedOpt)
 
         _quizState.update {
             it.copy(
                 isAnswerSubmitted = true,
-                isAnswerCorrect = isCorrect,
+                isAnswerCorrect = false, // unknown client-side by design — server is authoritative
                 userAnswers = updatedAnswers
             )
         }
@@ -283,50 +340,59 @@ class LearningViewModel(
                 )
             }
         } else {
-            // Finish quiz!
-            val cId = _currentCourseId.value ?: quiz.courseId
-            val attempt = repository.submitQuizAttempt(cId, quiz.id, state.userAnswers)
-            _quizState.update {
-                it.copy(
-                    quizAttempt = attempt,
-                    isFinished = true
-                )
+            val cId = _currentCourseId.value ?: quiz.courseId.toString()
+            viewModelScope.launch {
+                _quizState.update { it.copy(isSubmitting = true) }
+                when (val result = repository.submitQuizAttempt(cId, quiz.id.toString(), state.userAnswers)) {
+                    is RepoResult.Success -> {
+                        _quizState.update {
+                            it.copy(quizAttempt = result.data, isFinished = true, isSubmitting = false)
+                        }
+                    }
+                    is RepoResult.Failure -> {
+                        _quizState.update { it.copy(isSubmitting = false) }
+                        _toastMessage.value = result.message
+                    }
+                }
             }
         }
     }
 
     fun retakeQuiz() {
         val quiz = _quizState.value.quiz ?: return
-        val cId = _currentCourseId.value ?: quiz.courseId
-        startQuiz(cId, quiz.id)
+        val cId = _currentCourseId.value ?: quiz.courseId.toString()
+        startQuiz(cId, quiz.id.toString())
     }
 
     fun proceedFromQuizToCompletion() {
         val state = _quizState.value
-        val cId = _currentCourseId.value ?: state.quiz?.courseId ?: return
-        val score = state.quizAttempt?.scorePercentage ?: 86
+        val cId = _currentCourseId.value ?: state.quiz?.courseId?.toString() ?: return
+        val score = state.quizAttempt?.scorePercentage ?: 0
         navigateTo(ScreenDestination.CourseCompletion(cId, score))
     }
 
+    /**
+     * No confirmed backend "certificate" table/RPC exists (flagged as an
+     * open item during architecture planning). This renders a preview built
+     * from real course/employee/attempt data already in memory, exactly as
+     * the previous implementation's fallback branch did — it is not a
+     * hardcoded course or quiz, only a display certificate.
+     */
     fun viewCertificate(courseId: String) {
-        val cert = repository.getCertificate(courseId)
-        if (cert != null) {
-            _activeCertificate.value = cert
-        } else {
-            // Provide preview certificate
-            val course = repository.getCourse(courseId)
-            _activeCertificate.value = Certificate(
-                id = "PREVIEW-$courseId",
-                certificateNumber = "SKU-2026-${courseId.uppercase()}-PREVIEW",
-                courseId = courseId,
-                courseTitle = course?.title ?: "SkillUp Course",
-                recipientName = currentUser.value?.name ?: "Rahul Sharma",
-                employeeCode = currentUser.value?.employeeCode ?: "EMP001",
-                completionDate = "24 August 2026",
-                scorePercentage = 86,
-                totalModulesCompleted = course?.modules?.size ?: 6
-            )
-        }
+        val course = repository.getCourse(courseId)
+        val attempt = course?.finalQuizId?.let { repository.getQuizAttempt(it) }
+        val user = currentUser.value
+        _activeCertificate.value = Certificate(
+            id = "CERT-$courseId",
+            certificateNumber = "SKU-${courseId.uppercase()}",
+            courseId = courseId,
+            courseTitle = course?.title ?: "SkillUp Course",
+            recipientName = user?.name ?: "SkillUp Learner",
+            employeeCode = user?.employeeCode ?: "",
+            completionDate = "",
+            scorePercentage = attempt?.scorePercentage ?: course?.completionPercentage ?: 0,
+            totalModulesCompleted = course?.modules?.count { it.status == com.example.data.model.ModuleStatus.COMPLETED } ?: 0
+        )
     }
 
     fun dismissCertificate() {

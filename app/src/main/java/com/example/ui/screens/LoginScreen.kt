@@ -76,7 +76,7 @@ fun LoginScreen(
     viewModel: LearningViewModel,
     modifier: Modifier = Modifier
 ) {
-    val userId by viewModel.loginUserId.collectAsState()
+    val userId by viewModel.loginEmail.collectAsState()
     val password by viewModel.loginPassword.collectAsState()
     val errorMessage by viewModel.loginError.collectAsState()
     val isLoggingIn by viewModel.isLoggingIn.collectAsState()
@@ -189,9 +189,9 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // User ID Field
+                    // Email Field
                     Text(
-                        text = "User ID",
+                        text = "Email",
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.SemiBold,
                             color = Slate700
@@ -200,8 +200,8 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     OutlinedTextField(
                         value = userId,
-                        onValueChange = { viewModel.onUserIdChange(it) },
-                        placeholder = { Text("e.g. EMP001", color = Slate400, fontSize = 14.sp) },
+                        onValueChange = { viewModel.onEmailChange(it) },
+                        placeholder = { Text("you@company.com", color = Slate400, fontSize = 14.sp) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Badge,
@@ -211,7 +211,7 @@ fun LoginScreen(
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Text,
+                            keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
                         ),
                         shape = RoundedCornerShape(16.dp),
@@ -347,49 +347,6 @@ fun LoginScreen(
                             modifier = Modifier
                                 .clickable { showForgotPasswordDialog = true }
                                 .padding(vertical = 4.dp, horizontal = 8.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Demo Credentials Quick Autofill Pill
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Slate100),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Slate200, RoundedCornerShape(12.dp))
-                    .clickable { viewModel.autofillDemoCredentials() }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = CorporateBlue,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Prototype Demo Credentials",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Slate800
-                            )
-                        )
-                        Text(
-                            text = "User ID: EMP001  •  Password: skillup123 (Tap to autofill)",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = Slate600,
-                                fontSize = 11.sp
-                            )
                         )
                     }
                 }
