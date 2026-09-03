@@ -1,20 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=admin-portal/index.html">
-    <title>Redirecting to SkillUp Admin Portal...</title>
-    <script>
-        // Preserve any URL hash (e.g. a Supabase Auth recovery/signup token
-        // delivered as #access_token=...&type=recovery&...) when redirecting,
-        // so it isn't silently discarded before the app can process it.
-        window.location.href = "admin-portal/index.html" + window.location.hash;
-    </script>
-</head>
-<body style="font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0A2540; color: #FFFFFF;">
-    <div style="text-align: center;">
-        <h1 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">SkillUp Admin Portal</h1>
-        <p style="color: #94A3B8; font-size: 14px;">Redirecting to Admin Portal... <a href="admin-portal/index.html" style="color: #60A5FA;">Click here if not redirected</a></p>
-    </div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SkillUp</title>
+    <meta name="description" content="Premium native enterprise employee learning and skill development platform." />
+    <meta property="og:title" content="SkillUp" />
+    <meta property="og:description" content="Premium native enterprise employee learning and skill development platform." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#F8FAFC] text-slate-900 antialiased font-sans">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

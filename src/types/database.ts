@@ -38,7 +38,8 @@ export interface Employee {
   updated_at?: string;
   reporting_manager_employee_id?: string | null;
   reporting_manager_name?: string | null;
-  
+  reporting_manager_email?: string | null;
+
   // Joined or resolved fields for UI display
   role_name?: string;
   location_name?: string;
@@ -294,8 +295,8 @@ export interface DashboardStats {
 
 export interface EmployeeFilters {
   search: string;
-  location: string;
-  role: string;
+  location?: string;
+  role?: string;
   employmentStatus: 'ALL' | EmploymentStatus;
   skillUpAccess: 'ALL' | SkillUpAccess;
   page: number;

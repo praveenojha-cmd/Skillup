@@ -2,21 +2,47 @@
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
 
-# Run and deploy your AI Studio app
+# SkillUp LMS — Enterprise Learning & Skill Development
 
-This contains everything you need to run your app locally.
+SkillUp LMS is a modern enterprise learning management system built with React, TypeScript, Vite, and Tailwind CSS. It features dual portals: an Executive Admin Portal for workforce management and curriculum authoring, and an Employee Learner Portal for completing courses, taking interactive quizzes, and earning verifiable certifications.
 
-View your app in AI Studio: https://ai.studio/apps/e90b9098-eb82-40aa-b8d6-6dea1da9fe36
+## Features
 
-## Run Locally
+### Learner Portal
+- **Dashboard & KPIs**: Track mandatory/elective assignments, progress percentages, overdue alerts, and learning achievements.
+- **Course Catalog & View**: Explore courses, view detailed syllabus modules, lesson previews, and estimated duration.
+- **Curriculum Player**: Rich multi-format content viewer supporting text guides, policies, video lessons, and interactive assessments.
+- **Assessment Engine**: Multi-question quizzes with instant answer feedback, passing score thresholds, and real-time review.
+- **Certificates & History**: View completion records and verified certificate previews with authorized sign-off.
+- **Profile**: Manage learner profile details and toggle administrative view if dual-role access is provisioned.
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+### Admin Portal
+- **Executive Dashboard**: Learning health KPIs, completion rate leaderboards, regional distribution metrics, and active employee counts.
+- **Employee Directory**: Enterprise employee management (813+ employees), search, filter by location/role/access, bulk CSV import, and edit modals.
+- **Course Studio**: Curriculum authoring tool with module sequencing, lesson management (video/doc/article), and quiz builder.
+- **Course Assignments**: Assign courses individually or in bulk cohorts with customized due dates and mandatory/elective flags.
+- **Analytics & Reporting**: Compliance exports, regional progress metrics, and evaluation summaries.
 
+## Getting Started
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
-7. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
+### Prerequisites
+- Node.js 20+
+- npm
+
+### Installation & Run Locally
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Build for production:
+   ```bash
+   npm run build
+   ```
+

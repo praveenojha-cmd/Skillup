@@ -18,7 +18,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { adminProfile, isSuperAdmin, logout } = useAuth();
 
-  const navItems = [
+  interface SidebarNavItem {
+    label: string;
+    route: AppRoute;
+    icon: React.ReactNode;
+    badge?: string;
+  }
+
+  const navItems: SidebarNavItem[] = [
     {
       label: 'Dashboard',
       route: '/admin/dashboard' as AppRoute,

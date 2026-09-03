@@ -1,11 +1,14 @@
 {
   "name": "applet",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3000",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 3000",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/main.tsx --bundle --outfile=dist/bundle.js --format=iife --target=es2020 --define:process.env.NODE_ENV=\\\"'production'\\\" && node scripts/copy-bundle.js",
     "test": "echo \"Build test passed\""
   },
   "keywords": [],
@@ -18,9 +21,13 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
     "esbuild": "^0.28.2",
-    "typescript": "^7.0.2"
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
   }
 }
