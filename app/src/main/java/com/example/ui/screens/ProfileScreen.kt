@@ -84,6 +84,17 @@ fun ProfileScreen(
     val completedCount = courses.count { it.status == com.example.data.model.CourseStatus.COMPLETED }
     val inProgressCount = courses.count { it.status == com.example.data.model.CourseStatus.IN_PROGRESS }
 
+    // Derived from the live user's real name — never a demo identity's initials.
+    val avatarInitials = user?.name
+        ?.trim()
+        ?.split(Regex("\\s+"))
+        ?.filter { it.isNotBlank() }
+        ?.take(2)
+        ?.mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        ?.joinToString("")
+        ?.ifBlank { null }
+        ?: "-"
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -138,7 +149,7 @@ fun ProfileScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "RS",
+                            text = avatarInitials,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
@@ -151,7 +162,7 @@ fun ProfileScreen(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = user?.name ?: "Rahul Sharma",
+                            text = user?.name ?: "-",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = Slate900,
@@ -166,7 +177,7 @@ fun ProfileScreen(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "Employee ID: ${user?.employeeCode ?: "EMP001"}",
+                                text = "Employee ID: ${user?.employeeCode ?: "-"}",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     color = CorporateBlue,
                                     fontWeight = FontWeight.Bold,
@@ -198,7 +209,7 @@ fun ProfileScreen(
                                 style = MaterialTheme.typography.labelSmall.copy(color = Slate400, fontSize = 10.sp)
                             )
                             Text(
-                                text = user?.role ?: "Relationship Manager",
+                                text = user?.role ?: "-",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold,
                                     color = Slate800
@@ -221,7 +232,7 @@ fun ProfileScreen(
                                 style = MaterialTheme.typography.labelSmall.copy(color = Slate400, fontSize = 10.sp)
                             )
                             Text(
-                                text = user?.location ?: "Bangalore",
+                                text = user?.location ?: "-",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold,
                                     color = Slate800
@@ -250,7 +261,7 @@ fun ProfileScreen(
         ) {
             StatCard(
                 title = "Courses Assigned",
-                value = "${user?.coursesAssignedCount ?: 8}",
+                value = "${user?.coursesAssignedCount ?: 0}",
                 icon = Icons.Default.Assignment,
                 accentColor = CorporateBlue,
                 bgColor = CorporateBlueMuted,
@@ -259,7 +270,7 @@ fun ProfileScreen(
 
             StatCard(
                 title = "Courses Completed",
-                value = "${completedCount + 4}",
+                value = "$completedCount",
                 icon = Icons.Default.CheckCircle,
                 accentColor = SuccessGreen,
                 bgColor = SuccessGreenMuted,
@@ -284,7 +295,7 @@ fun ProfileScreen(
 
             StatCard(
                 title = "Average Score",
-                value = "${user?.avgScorePercentage ?: 84}%",
+                value = user?.avgScorePercentage?.let { "$it%" } ?: "-",
                 icon = Icons.Default.EmojiEvents,
                 accentColor = AccentTeal,
                 bgColor = AccentTealMuted,
@@ -413,7 +424,7 @@ fun ProfileScreen(
             },
             text = {
                 if (isSaved) {
-                    Text("Password successfully updated for Rahul Sharma (EMP001).")
+                    Text("Password successfully updated for ${user?.name ?: "your account"}.")
                 } else {
                     Column {
                         Text(

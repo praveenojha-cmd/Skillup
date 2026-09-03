@@ -42,8 +42,12 @@ data class QuizUiState(
     val quiz: Quiz? = null,
     val currentQuestionIndex: Int = 0,
     val selectedOptionId: String? = null,
+    // Whether the current answer has been saved locally and the learner may
+    // proceed. This intentionally never claims correct/incorrect — the RPC
+    // that returns questions omits is_correct by design, and only the
+    // server-authoritative learner_submit_quiz_attempt result may report
+    // correctness (see quizAttempt below).
     val isAnswerSubmitted: Boolean = false,
-    val isAnswerCorrect: Boolean = false,
     val userAnswers: Map<String, String> = emptyMap(),
     val quizAttempt: QuizAttempt? = null,
     val isFinished: Boolean = false,
@@ -320,7 +324,6 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
         _quizState.update {
             it.copy(
                 isAnswerSubmitted = true,
-                isAnswerCorrect = false, // unknown client-side by design — server is authoritative
                 userAnswers = updatedAnswers
             )
         }
@@ -335,8 +338,7 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
                 it.copy(
                     currentQuestionIndex = it.currentQuestionIndex + 1,
                     selectedOptionId = null,
-                    isAnswerSubmitted = false,
-                    isAnswerCorrect = false
+                    isAnswerSubmitted = false
                 )
             }
         } else {

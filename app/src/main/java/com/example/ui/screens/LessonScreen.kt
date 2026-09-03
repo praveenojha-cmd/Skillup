@@ -73,34 +73,15 @@ fun LessonScreen(
         return
     }
 
-    // Default fallback lesson data if module does not have a custom lesson
-    val lesson: Lesson = module.lesson ?: Lesson(
-        id = "gen_${module.id}",
-        moduleId = module.id,
-        courseId = courseId,
-        title = module.title,
-        moduleOrder = module.orderIndex,
-        totalModules = course?.moduleCount ?: 6,
-        type = module.type,
-        durationMinutes = module.durationMinutes,
-        overview = module.subtitle,
-        learningObjectives = listOf(
-            "How LTV is calculated and structured for borrower applications",
-            "Applicable limits and regulatory compliance thresholds",
-            "Common pricing scenarios and interest rate schemes",
-            "Common mistakes and how to avoid credit miscalculations"
-        ),
-        keyTakeaways = listOf(
-            "Maintain strict adherence to collateral valuation standards",
-            "Always inform customers clearly of interest cycles and documentation requirements"
-        ),
-        videoTitle = module.title,
-        videoAuthor = "Corporate Training Lead",
-        articleParagraphs = listOf(
-            "In this corporate training module, you will review the key standard operating procedures and operational compliance benchmarks.",
-            "Please ensure you review all learning objectives and apply these guidelines during regular branch operations."
-        )
-    )
+    // No fabricated fallback content — if this module has no real lesson
+    // loaded from Supabase, show an explicit empty state instead of
+    // inventing lesson data.
+    val lesson: Lesson = module.lesson ?: run {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Lesson content unavailable.")
+        }
+        return
+    }
 
     val isAlreadyCompleted = module.status == ModuleStatus.COMPLETED
     val scrollState = rememberScrollState()

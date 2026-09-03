@@ -291,29 +291,23 @@ fun QuizScreen(
                         option = option,
                         isSelected = quizState.selectedOptionId == option.id,
                         isSubmitted = quizState.isAnswerSubmitted,
-                        isCorrectOption = option.id == currentQuestion.correctOptionId,
                         onClick = { viewModel.selectQuizOption(option.id) }
                     )
                 }
 
-                // Answer Feedback Banner (shows after submission)
+                // Answer Saved Banner (shows after submission) — this app
+                // never claims correct/incorrect client-side; only the
+                // final learner_submit_quiz_attempt result is authoritative.
                 AnimatedVisibility(
                     visible = quizState.isAnswerSubmitted,
                     enter = fadeIn() + slideInVertically()
                 ) {
-                    val isCorrect = quizState.isAnswerCorrect
                     Card(
                         shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isCorrect) SuccessGreenMuted else ErrorRedMuted
-                        ),
+                        colors = CardDefaults.cardColors(containerColor = CorporateBlueMuted),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(
-                                1.dp,
-                                if (isCorrect) SuccessGreen else ErrorRed,
-                                RoundedCornerShape(14.dp)
-                            )
+                            .border(1.dp, CorporateBlue, RoundedCornerShape(14.dp))
                     ) {
                         Column(
                             modifier = Modifier
@@ -322,23 +316,23 @@ fun QuizScreen(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = if (isCorrect) Icons.Default.CheckCircle else Icons.Default.Close,
+                                    imageVector = Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    tint = if (isCorrect) SuccessGreen else ErrorRed,
+                                    tint = CorporateBlue,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (isCorrect) "Correct!" else "Incorrect",
+                                    text = "Answer saved",
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isCorrect) SuccessGreen else ErrorRed
+                                        color = CorporateBlue
                                     )
                                 )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = currentQuestion.explanation,
+                                text = "Your final score will be calculated once you complete the assessment.",
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = Slate800,
                                     lineHeight = 20.sp

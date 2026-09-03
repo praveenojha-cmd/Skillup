@@ -699,33 +699,29 @@ fun QuizOptionCard(
     option: QuizOption,
     isSelected: Boolean,
     isSubmitted: Boolean,
-    isCorrectOption: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Correctness is never known client-side (learner_get_course_quiz_questions
+    // intentionally omits it) — styling only ever reflects selection/saved
+    // state, never right/wrong.
     val borderColor = when {
-        isSubmitted && isCorrectOption -> SuccessGreen
-        isSubmitted && isSelected && !isCorrectOption -> ErrorRed
+        isSubmitted && isSelected -> CorporateBlue
         isSelected -> CorporateBlue
         else -> Slate200
     }
 
     val backgroundColor = when {
-        isSubmitted && isCorrectOption -> SuccessGreenMuted.copy(alpha = 0.5f)
-        isSubmitted && isSelected && !isCorrectOption -> ErrorRedMuted.copy(alpha = 0.5f)
         isSelected -> CorporateBlueMuted.copy(alpha = 0.4f)
         else -> Color.White
     }
 
     val pillColor = when {
-        isSubmitted && isCorrectOption -> SuccessGreen
-        isSubmitted && isSelected && !isCorrectOption -> ErrorRed
         isSelected -> CorporateBlue
         else -> Slate100
     }
 
     val pillTextColor = when {
-        isSubmitted && (isCorrectOption || (isSelected && !isCorrectOption)) -> Color.White
         isSelected -> Color.White
         else -> Slate700
     }
@@ -737,7 +733,7 @@ fun QuizOptionCard(
         modifier = modifier
             .fillMaxWidth()
             .border(
-                width = if (isSelected || (isSubmitted && isCorrectOption)) 2.dp else 1.dp,
+                width = if (isSelected) 2.dp else 1.dp,
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
@@ -779,23 +775,14 @@ fun QuizOptionCard(
                 modifier = Modifier.weight(1f)
             )
 
-            if (isSubmitted) {
+            if (isSubmitted && isSelected) {
                 Spacer(modifier = Modifier.width(8.dp))
-                if (isCorrectOption) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Correct Answer",
-                        tint = SuccessGreen,
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Incorrect Choice",
-                        tint = ErrorRed,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Answer Saved",
+                    tint = CorporateBlue,
+                    modifier = Modifier.size(22.dp)
+                )
             }
         }
     }
