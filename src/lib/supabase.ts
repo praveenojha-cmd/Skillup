@@ -2537,11 +2537,23 @@ export async function assignCourseIndividual(input: CreateIndividualAssignmentIn
   }
 
   // 2. Verify Employee is Active & Enabled
-  const { data: employee, error: empErr } = await client
+  //
+  // employees.id is a uuid column. Passing a non-uuid value (e.g. the
+  // human-readable employee_id business code, such as "4473") into an
+  // `id.eq.<value>` PostgREST filter makes Postgres try to cast that string
+  // to uuid, which throws an invalid-input-syntax error for the WHOLE query
+  // — not just that one OR branch. That made a real, existing employee
+  // (matchable by employee_id alone) appear as "not found" whenever the
+  // caller passed the business code rather than the internal uuid. Only add
+  // the `id.eq.` branch when the identifier is actually uuid-shaped.
+  const isUuidIdentifier = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.employeeId);
+  let employeeQuery = client
     .from('employees')
-    .select('id, employee_id, full_name, email, employment_status, skillup_access')
-    .or(`employee_id.eq.${input.employeeId},id.eq.${input.employeeId}`)
-    .single();
+    .select('id, employee_id, full_name, email, employment_status, skillup_access');
+  employeeQuery = isUuidIdentifier
+    ? employeeQuery.or(`employee_id.eq.${input.employeeId},id.eq.${input.employeeId}`)
+    : employeeQuery.eq('employee_id', input.employeeId);
+  const { data: employee, error: empErr } = await employeeQuery.single();
 
   if (empErr || !employee) {
     throw new Error(`Employee '${input.employeeId}' was not found in employee master.`);
