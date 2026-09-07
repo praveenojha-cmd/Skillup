@@ -334,8 +334,8 @@ export interface CreateEmployeeInput {
   full_name: string;
   email: string;
   mobile_number?: string | null;
-  role_id: number;
-  location_id: number;
+  role_id: string | number;
+  location_id: string | number;
   reporting_manager_employee_id?: string | null;
   reporting_manager_name?: string | null;
   employment_status: EmploymentStatus;
@@ -345,8 +345,8 @@ export interface CreateEmployeeInput {
 export interface UpdateEmployeeInput {
   full_name: string;
   mobile_number?: string | null;
-  role_id: number;
-  location_id: number;
+  role_id: string | number;
+  location_id: string | number;
   reporting_manager_employee_id?: string | null;
   reporting_manager_name?: string | null;
   employment_status: EmploymentStatus;

@@ -26,8 +26,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     full_name: '',
     email: '',
     mobile_number: '',
-    role_id: roles.length > 0 ? Number(roles[0].id) : 0,
-    location_id: locations.length > 0 ? Number(locations[0].id) : 0,
+    role_id: roles.length > 0 ? roles[0].id : '',
+    location_id: locations.length > 0 ? locations[0].id : '',
     reporting_manager_employee_id: '',
     reporting_manager_name: '',
     employment_status: 'ACTIVE',
@@ -45,8 +45,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         full_name: '',
         email: '',
         mobile_number: '',
-        role_id: roles.length > 0 ? Number(roles[0].id) : 0,
-        location_id: locations.length > 0 ? Number(locations[0].id) : 0,
+        role_id: roles.length > 0 ? roles[0].id : '',
+        location_id: locations.length > 0 ? locations[0].id : '',
         reporting_manager_employee_id: '',
         reporting_manager_name: '',
         employment_status: 'ACTIVE',
@@ -77,11 +77,11 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
       errors.email = 'Please enter a valid email address format.';
     }
 
-    if (!formData.role_id || formData.role_id === 0) {
+    if (!formData.role_id || formData.role_id === '') {
       errors.role_id = 'Please select a valid Designation.';
     }
 
-    if (!formData.location_id || formData.location_id === 0) {
+    if (!formData.location_id || formData.location_id === '') {
       errors.location_id = 'Please select a valid Operating Location.';
     }
 
@@ -219,16 +219,16 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             <select
               value={formData.role_id}
               onChange={(e) => {
-                setFormData({ ...formData, role_id: Number(e.target.value) });
+                setFormData({ ...formData, role_id: e.target.value });
                 if (formErrors.role_id) setFormErrors({ ...formErrors, role_id: '' });
               }}
               className={`w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${
                 formErrors.role_id ? 'border-rose-400' : 'border-slate-200'
               }`}
             >
-              <option value={0}>Select Designation...</option>
+              <option value="">Select Designation...</option>
               {roles.map((r) => (
-                <option key={r.id} value={Number(r.id)}>
+                <option key={r.id} value={r.id}>
                   {r.name} {r.description ? `(${r.description})` : ''}
                 </option>
               ))}
@@ -246,16 +246,16 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
             <select
               value={formData.location_id}
               onChange={(e) => {
-                setFormData({ ...formData, location_id: Number(e.target.value) });
+                setFormData({ ...formData, location_id: e.target.value });
                 if (formErrors.location_id) setFormErrors({ ...formErrors, location_id: '' });
               }}
               className={`w-full px-3 py-2 bg-slate-50 border rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 transition ${
                 formErrors.location_id ? 'border-rose-400' : 'border-slate-200'
               }`}
             >
-              <option value={0}>Select Operating Location...</option>
+              <option value="">Select Operating Location...</option>
               {locations.map((loc) => (
-                <option key={loc.id} value={Number(loc.id)}>
+                <option key={loc.id} value={loc.id}>
                   {loc.city || loc.name} {loc.state ? `— ${loc.state}` : ''}
                 </option>
               ))}
