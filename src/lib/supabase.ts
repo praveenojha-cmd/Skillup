@@ -1667,6 +1667,68 @@ export async function toggleCoursePublish(
 }
 
 /**
+ * Archive a course, moving it out of active circulation without deleting the
+ * row or any related data (course_assignments, lesson_progress, quiz_attempts,
+ * etc. are never touched). Blocked if the course has any non-REVOKED
+ * assignment — see hasCourseActiveAssignments().
+ */
+export async function archiveCourse(courseId: string | number, currentCourse: Course): Promise<Course> {
+  const client = getSupabaseClient();
+
+  const { hasActive, activeCount } = await hasCourseActiveAssignments(courseId);
+  if (hasActive) {
+    throw new Error(
+      `This course has ${activeCount} active assignment${activeCount === 1 ? '' : 's'}. ` +
+      `Assignments must be completed or revoked before the course can be archived.`
+    );
+  }
+
+  const payload: any = {
+    status: 'ARCHIVED',
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await client
+    .from('courses')
+    .update(payload)
+    .eq('id', courseId)
+    .select('id, title, description, category, difficulty, estimated_duration_minutes, thumbnail_url, status, created_at, updated_at')
+    .single();
+
+  if (error) {
+    console.error('Error archiving course:', error);
+    throw new Error(`Database error: ${error.message}`);
+  }
+
+  await createAuditLog({
+    action: 'COURSE_ARCHIVED',
+    entity_type: 'COURSE',
+    entity_id: String(courseId),
+    previous_values: { status: currentCourse.status },
+    new_values: payload
+  });
+
+  return {
+    ...currentCourse,
+    status: data.status || 'ARCHIVED',
+    updated_at: data.updated_at
+  };
+}
+
+/**
+ * Restore an archived course. Reuses toggleCoursePublish's own curriculum
+ * validation rather than duplicating it: tries PUBLISHED first, and falls
+ * back to DRAFT only if that validation rejects it (e.g. no modules/lessons).
+ */
+export async function restoreCourse(courseId: string | number, currentCourse: Course): Promise<Course> {
+  try {
+    return await toggleCoursePublish(courseId, true, currentCourse);
+  } catch {
+    return await toggleCoursePublish(courseId, false, currentCourse);
+  }
+}
+
+/**
  * Add a new Module to a Course
  */
 export async function createModule(
@@ -2145,22 +2207,25 @@ export async function fetchAssignableCourses(): Promise<Course[]> {
 }
 
 /**
- * Check if a course has active assignments (status != 'REVOKED')
- * Prevents accidental structural deletions on courses with enrolled learners.
+ * Check if a course has active assignments (status != 'REVOKED').
+ * Used to gate archiveCourse() so a course with enrolled learners can't be
+ * silently removed from circulation. No .limit() here — this now guards a
+ * real action, and capping the scan could under-count active assignments
+ * beyond the cap and let a course archive despite genuine active learners.
  */
-export async function hasCourseActiveAssignments(courseId: string | number): Promise<boolean> {
+export async function hasCourseActiveAssignments(courseId: string | number): Promise<{ hasActive: boolean; activeCount: number }> {
   const client = getSupabaseClient();
   try {
     const { data, error } = await client
       .from('course_assignments')
       .select('id, status')
-      .eq('course_id', courseId)
-      .limit(20);
+      .eq('course_id', courseId);
 
-    if (error || !data) return false;
-    return data.some((a: any) => a.status !== 'REVOKED');
+    if (error || !data) return { hasActive: false, activeCount: 0 };
+    const activeCount = data.filter((a: any) => a.status !== 'REVOKED').length;
+    return { hasActive: activeCount > 0, activeCount };
   } catch {
-    return false;
+    return { hasActive: false, activeCount: 0 };
   }
 }
 

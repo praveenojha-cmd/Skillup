@@ -4,6 +4,7 @@ import { fetchCourses, fetchCourseCategories, createCourse, updateCourse, toggle
 import { CreateCourseModal } from '../components/course/CreateCourseModal';
 import { EditCourseModal } from '../components/course/EditCourseModal';
 import { CoursePreviewModal } from '../components/course/CoursePreviewModal';
+import { ArchiveCourseModal } from '../components/course/ArchiveCourseModal';
 import { CourseStudio } from '../components/course/CourseStudio';
 import { useAuth } from '../context/AuthContext';
 
@@ -37,6 +38,7 @@ export const CoursesPage: React.FC = () => {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewCourse, setPreviewCourse] = useState<Course | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<{ course: Course; mode: 'archive' | 'restore' } | null>(null);
 
   // Permissions
   const isReadOnly = role === 'REPORTING_ADMIN';
@@ -133,7 +135,7 @@ export const CoursesPage: React.FC = () => {
   }
 
   const publishedCount = courses.filter(c => c.status === 'PUBLISHED').length;
-  const draftCount = courses.filter(c => c.status !== 'PUBLISHED').length;
+  const draftCount = courses.filter(c => c.status !== 'PUBLISHED' && c.status !== 'ARCHIVED').length;
   const totalPages = Math.ceil(totalCount / filters.pageSize) || 1;
 
   return (
@@ -273,6 +275,7 @@ export const CoursesPage: React.FC = () => {
               <option value="ALL">All Statuses</option>
               <option value="PUBLISHED">Published Only</option>
               <option value="DRAFT">Draft Only</option>
+              <option value="ARCHIVED">Archived Only</option>
             </select>
           </div>
 
@@ -365,6 +368,8 @@ export const CoursesPage: React.FC = () => {
                       <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] shadow-sm flex items-center gap-1 ${
                         course.status === 'PUBLISHED'
                           ? 'bg-emerald-600 text-white'
+                          : course.status === 'ARCHIVED'
+                          ? 'bg-slate-500 text-white'
                           : 'bg-amber-600 text-white'
                       }`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
@@ -445,6 +450,32 @@ export const CoursesPage: React.FC = () => {
                     </button>
                   )}
 
+                  {!isReadOnly && (
+                    course.status === 'ARCHIVED' ? (
+                      <button
+                        type="button"
+                        onClick={() => setArchiveTarget({ course, mode: 'restore' })}
+                        className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-xl text-xs font-semibold transition"
+                        title="Restore Course"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setArchiveTarget({ course, mode: 'archive' })}
+                        className="p-2 text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition"
+                        title="Archive Course"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 01-2-2V5a1 1 0 011-1h16a1 1 0 011 1v1a2 2 0 01-2 2M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-7 4h.01" />
+                        </svg>
+                      </button>
+                    )
+                  )}
+
                   <button
                     type="button"
                     onClick={() => setActiveStudioCourseId(course.id)}
@@ -517,6 +548,19 @@ export const CoursesPage: React.FC = () => {
           isOpen={isPreviewModalOpen}
           onClose={() => setIsPreviewModalOpen(false)}
           course={previewCourse}
+        />
+      )}
+
+      {archiveTarget && (
+        <ArchiveCourseModal
+          isOpen={Boolean(archiveTarget)}
+          onClose={() => setArchiveTarget(null)}
+          course={archiveTarget.course}
+          mode={archiveTarget.mode}
+          onSuccess={(message) => {
+            showNotification(message);
+            loadData();
+          }}
         />
       )}
     </div>
