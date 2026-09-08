@@ -23,13 +23,12 @@ interface QuizBuilderModalProps {
   isOpen: boolean;
   onClose: () => void;
   quiz: Quiz | null;
-  courseId?: string | number;
-  moduleId?: string | number;
+  /** Real FK — public.quizzes has no course_id/module_id column; a quiz attaches directly to a lesson. */
+  lessonId: string | number;
   parentTitle: string;
   onSubmit: (input: {
     id?: string | number;
-    course_id?: string | number;
-    module_id?: string | number;
+    lesson_id: string | number;
     title: string;
     description?: string;
     passing_score: number;
@@ -55,8 +54,7 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
   isOpen,
   onClose,
   quiz,
-  courseId,
-  moduleId,
+  lessonId,
   parentTitle,
   onSubmit
 }) => {
@@ -250,8 +248,7 @@ export const QuizBuilderModal: React.FC<QuizBuilderModalProps> = ({
     try {
       await onSubmit({
         id: quiz?.id,
-        course_id: courseId,
-        module_id: moduleId,
+        lesson_id: lessonId,
         title: cleanTitle,
         description: description.trim() || undefined,
         passing_score: passingScore,

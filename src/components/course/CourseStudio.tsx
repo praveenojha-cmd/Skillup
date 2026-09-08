@@ -53,6 +53,10 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
   const [isQuizModalOpen, setIsQuizModalOpen] = useState(false);
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [targetModuleForQuiz, setTargetModuleForQuiz] = useState<Module | null>(null);
+  // public.quizzes attaches directly to a lesson (lesson_id), not a module or
+  // course — this holds the resolved lesson to attach the quiz being
+  // created/edited to. See handleOpenAddQuiz/handleOpenEditQuiz below.
+  const [targetLessonIdForQuiz, setTargetLessonIdForQuiz] = useState<string | number | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Permission check: Reporting admins have read-only access
@@ -182,15 +186,26 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
     await loadCourse();
   };
 
-  // Quiz Actions
+  // Quiz Actions. public.quizzes attaches directly to a lesson (lesson_id) —
+  // it has no course_id/module_id column — so creating a quiz "on a module"
+  // resolves to that module's first lesson (by sequence). A module with no
+  // lessons yet has nothing to attach a quiz to.
   const handleOpenAddQuiz = (mod: Module) => {
+    const sortedLessons = [...(mod.lessons || [])].sort((a, b) => (a.sequence_order || 1) - (b.sequence_order || 1));
+    const firstLesson = sortedLessons[0];
+    if (!firstLesson) {
+      setError('Add at least one lesson to this module before creating a quiz.');
+      return;
+    }
     setTargetModuleForQuiz(mod);
+    setTargetLessonIdForQuiz(firstLesson.id);
     setEditingQuiz(null);
     setIsQuizModalOpen(true);
   };
 
   const handleOpenEditQuiz = (quiz: Quiz, mod: Module) => {
     setTargetModuleForQuiz(mod);
+    setTargetLessonIdForQuiz(quiz.lesson_id);
     setEditingQuiz(quiz);
     setIsQuizModalOpen(true);
   };
@@ -1067,13 +1082,12 @@ export const CourseStudio: React.FC<CourseStudioProps> = ({
         />
       )}
 
-      {isQuizModalOpen && (
+      {isQuizModalOpen && targetLessonIdForQuiz != null && (
         <QuizBuilderModal
           isOpen={isQuizModalOpen}
           onClose={() => setIsQuizModalOpen(false)}
           quiz={editingQuiz}
-          courseId={course.id}
-          moduleId={targetModuleForQuiz?.id}
+          lessonId={targetLessonIdForQuiz}
           parentTitle={targetModuleForQuiz?.title || course.title}
           onSubmit={handleSaveQuiz}
         />

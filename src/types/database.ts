@@ -118,13 +118,23 @@ export interface Lesson {
 
 export interface Quiz {
   id: string | number;
+  /** Real DB column — public.quizzes has no course_id/module_id column; a quiz's
+   *  course is only reachable by walking lesson -> module -> course. */
+  lesson_id: string | number;
+  /** NOT a persisted column — resolved client-side (via lesson_id) for internal grouping only. */
   course_id?: string | number;
+  /** NOT a persisted column — resolved client-side (via lesson_id) for internal grouping only. */
   module_id?: string | number;
   title: string;
+  /** NOT a persisted DB column (public.quizzes has no description column) — UI-only, never round-trips to the server. */
   description?: string;
   passing_score: number;
+  /** NOT a persisted DB column (public.quizzes has no time_limit_minutes column) — UI-only, never round-trips to the server. */
   time_limit_minutes?: number;
+  /** NOT a persisted DB column (public.quizzes has no is_active column) — always true client-side. */
   is_active?: boolean;
+  /** Real DB column — max attempts allowed, currently not surfaced in the Quiz Builder UI. */
+  attempts_allowed?: number;
   created_at?: string;
   updated_at?: string;
   questions?: QuizQuestion[];
@@ -475,7 +485,11 @@ export interface LearnerQuizQuestion {
 
 export interface LearnerQuiz {
   id: string | number;
+  /** Real DB column — public.quizzes has no course_id/module_id column. */
+  lesson_id?: string | number;
+  /** NOT a persisted column — resolved client-side for display only. */
   course_id?: string | number;
+  /** NOT a persisted column — resolved client-side for display only. */
   module_id?: string | number;
   title: string;
   description?: string;

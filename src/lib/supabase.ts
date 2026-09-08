@@ -1211,6 +1211,7 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
   let moduleCountMap = new Map<string | number, number>();
   let moduleIds: Array<string | number> = [];
   let courseModuleIdsMap = new Map<string | number, Array<string | number>>();
+  let moduleCourseMap = new Map<string | number, string | number>();
   try {
     const { data: modulesData } = await client
       .from('modules')
@@ -1221,6 +1222,7 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
       modulesData.forEach((m: any) => {
         moduleCountMap.set(m.course_id, (moduleCountMap.get(m.course_id) || 0) + 1);
         moduleIds.push(m.id);
+        moduleCourseMap.set(m.id, m.course_id);
         const list = courseModuleIdsMap.get(m.course_id) || [];
         list.push(m.id);
         courseModuleIdsMap.set(m.course_id, list);
@@ -1230,8 +1232,11 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
     console.warn('Could not fetch module counts:', err);
   }
 
-  // Fetch lesson counts for these modules
+  // Fetch lesson counts for these modules, and a lesson->module map so quiz
+  // counts (below) can be traced back to a course via lesson_id.
   let lessonCountMap = new Map<string | number, number>();
+  let lessonIds: Array<string | number> = [];
+  let lessonModuleMap = new Map<string | number, string | number>();
   if (moduleIds.length > 0) {
     try {
       const { data: lessonsData } = await client
@@ -1242,6 +1247,8 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
       if (lessonsData) {
         lessonsData.forEach((l: any) => {
           lessonCountMap.set(l.module_id, (lessonCountMap.get(l.module_id) || 0) + 1);
+          lessonIds.push(l.id);
+          lessonModuleMap.set(l.id, l.module_id);
         });
       }
     } catch (err) {
@@ -1249,23 +1256,29 @@ export async function fetchCourses(filters: CourseFilters): Promise<{
     }
   }
 
-  // Fetch quiz counts for these courses / modules
+  // Fetch quiz counts for these lessons. public.quizzes has no course_id/
+  // module_id column — the real FK chain is quizzes.lesson_id ->
+  // lessons.module_id -> modules.course_id, so counts are traced through that.
   let quizCountMap = new Map<string | number, number>();
-  try {
-    const { data: quizzesData } = await client
-      .from('quizzes')
-      .select('id, course_id, module_id')
-      .or(`course_id.in.(${courseIds.join(',')})${moduleIds.length ? `,module_id.in.(${moduleIds.join(',')})` : ''}`);
+  if (lessonIds.length > 0) {
+    try {
+      const { data: quizzesData } = await client
+        .from('quizzes')
+        .select('id, lesson_id')
+        .in('lesson_id', lessonIds);
 
-    if (quizzesData) {
-      quizzesData.forEach((q: any) => {
-        if (q.course_id) {
-          quizCountMap.set(q.course_id, (quizCountMap.get(q.course_id) || 0) + 1);
-        }
-      });
+      if (quizzesData) {
+        quizzesData.forEach((q: any) => {
+          const moduleId = lessonModuleMap.get(q.lesson_id);
+          const courseId = moduleId !== undefined ? moduleCourseMap.get(moduleId) : undefined;
+          if (courseId !== undefined) {
+            quizCountMap.set(courseId, (quizCountMap.get(courseId) || 0) + 1);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Could not fetch quiz counts:', err);
     }
-  } catch (err) {
-    console.warn('Could not fetch quiz counts:', err);
   }
 
   const courses: Course[] = rawCourses.map((c: any) => {
@@ -1328,6 +1341,8 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
 
   // 3. Fetch lessons for all modules
   let lessonsByModule = new Map<string | number, Lesson[]>();
+  let lessonIds: Array<string | number> = [];
+  let lessonModuleMap = new Map<string | number, string | number>();
   if (moduleIds.length > 0) {
     const { data: rawLessons, error: lessErr } = await client
       .from('lessons')
@@ -1356,29 +1371,33 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
         updated_at: l.updated_at
       });
       lessonsByModule.set(l.module_id, list);
+      lessonIds.push(l.id);
+      lessonModuleMap.set(l.id, l.module_id);
     });
   }
 
-  // 4. Fetch quizzes for course and modules
+  // 4. Fetch quizzes for this course's lessons. public.quizzes has NO
+  // course_id/module_id column — the real FK chain is courses -> modules
+  // (modules.course_id) -> lessons (lessons.module_id) -> quizzes
+  // (quizzes.lesson_id). A quiz's course/module is only reachable by
+  // resolving its lesson_id through lessonModuleMap above.
   let quizzesByModule = new Map<string | number, Quiz[]>();
   let quizzesForCourse: Quiz[] = [];
   try {
-    let quizQuery = client
-      .from('quizzes')
-      .select('id, course_id, module_id, title, description, passing_score, time_limit_minutes, is_active, created_at, updated_at');
-    
-    if (moduleIds.length > 0) {
-      quizQuery = quizQuery.or(`course_id.eq.${courseId},module_id.in.(${moduleIds.join(',')})`);
-    } else {
-      quizQuery = quizQuery.eq('course_id', courseId);
+    let rawQuizzes: any[] = [];
+    if (lessonIds.length > 0) {
+      const { data, error: qErr } = await client
+        .from('quizzes')
+        .select('id, lesson_id, title, passing_score, attempts_allowed, created_at, updated_at')
+        .in('lesson_id', lessonIds);
+
+      if (qErr) {
+        console.warn('Error fetching quizzes:', qErr);
+      }
+      rawQuizzes = data || [];
     }
 
-    const { data: rawQuizzes, error: qErr } = await quizQuery;
-    if (qErr) {
-      console.warn('Error fetching quizzes:', qErr);
-    }
-
-    const quizzes = rawQuizzes || [];
+    const quizzes = rawQuizzes;
     const quizIds = quizzes.map((q: any) => q.id);
 
     // Fetch quiz questions
@@ -1386,9 +1405,9 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
     if (quizIds.length > 0) {
       const { data: rawQuestions } = await client
         .from('quiz_questions')
-        .select('id, quiz_id, question_text, question_type, points, explanation, sequence_order, created_at')
+        .select('id, quiz_id, question_text, explanation, sequence, created_at, updated_at')
         .in('quiz_id', quizIds)
-        .order('sequence_order', { ascending: true, nullsFirst: false });
+        .order('sequence', { ascending: true, nullsFirst: false });
 
       const questionIds = (rawQuestions || []).map((q: any) => q.id);
 
@@ -1397,9 +1416,9 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
       if (questionIds.length > 0) {
         const { data: rawOptions } = await client
           .from('quiz_options')
-          .select('id, question_id, option_text, is_correct, sequence_order, created_at')
+          .select('id, question_id, option_text, is_correct, sequence, created_at')
           .in('question_id', questionIds)
-          .order('sequence_order', { ascending: true, nullsFirst: false });
+          .order('sequence', { ascending: true, nullsFirst: false });
 
         (rawOptions || []).forEach((opt: any) => {
           const list = optionsByQuestion.get(opt.question_id) || [];
@@ -1408,7 +1427,7 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
             question_id: opt.question_id,
             option_text: opt.option_text,
             is_correct: Boolean(opt.is_correct),
-            sequence_order: opt.sequence_order || 1,
+            sequence_order: opt.sequence || 1,
             created_at: opt.created_at
           });
           optionsByQuestion.set(opt.question_id, list);
@@ -1421,10 +1440,12 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
           id: q.id,
           quiz_id: q.quiz_id,
           question_text: q.question_text,
-          question_type: q.question_type || 'SINGLE_CHOICE',
-          points: q.points || 1,
+          // question_type/points are NOT persisted columns on quiz_questions —
+          // defaulted here since they can't be read back from the database.
+          question_type: 'SINGLE_CHOICE',
+          points: 1,
           explanation: q.explanation,
-          sequence_order: q.sequence_order || 1,
+          sequence_order: q.sequence || 1,
           created_at: q.created_at,
           options: optionsByQuestion.get(q.id) || []
         });
@@ -1433,24 +1454,29 @@ export async function fetchCourseDetail(courseId: string | number): Promise<Cour
     }
 
     quizzes.forEach((q: any) => {
+      const moduleId = lessonModuleMap.get(q.lesson_id);
       const fullQuiz: Quiz = {
         id: q.id,
-        course_id: q.course_id,
-        module_id: q.module_id,
+        lesson_id: q.lesson_id,
+        course_id: courseId,
+        module_id: moduleId,
         title: q.title,
-        description: q.description,
+        // description/time_limit_minutes/is_active are NOT persisted columns
+        // on public.quizzes — defaulted here since they can't be read back.
+        description: undefined,
         passing_score: q.passing_score ?? 70,
-        time_limit_minutes: q.time_limit_minutes,
-        is_active: q.is_active !== undefined ? q.is_active : true,
+        time_limit_minutes: undefined,
+        is_active: true,
+        attempts_allowed: q.attempts_allowed,
         created_at: q.created_at,
         updated_at: q.updated_at,
         questions: questionsByQuiz.get(q.id) || []
       };
 
-      if (q.module_id) {
-        const mList = quizzesByModule.get(q.module_id) || [];
+      if (moduleId !== undefined) {
+        const mList = quizzesByModule.get(moduleId) || [];
         mList.push(fullQuiz);
-        quizzesByModule.set(q.module_id, mList);
+        quizzesByModule.set(moduleId, mList);
       } else {
         quizzesForCourse.push(fullQuiz);
       }
@@ -1975,8 +2001,9 @@ export async function reorderLessons(
  */
 export async function saveQuizWithQuestions(input: {
   id?: string | number;
-  course_id?: string | number;
-  module_id?: string | number;
+  /** Real FK — public.quizzes has no course_id/module_id column; a quiz
+   *  attaches directly to a lesson. Required for both create and update. */
+  lesson_id: string | number;
   title: string;
   description?: string;
   passing_score: number;
@@ -1999,6 +2026,10 @@ export async function saveQuizWithQuestions(input: {
   const client = getSupabaseClient();
   const cleanTitle = input.title.trim();
   if (!cleanTitle) throw new Error('Quiz Title is required.');
+
+  if (!input.lesson_id) {
+    throw new Error('A quiz must be attached to a lesson.');
+  }
 
   // Validate Questions
   if (!input.questions || input.questions.length === 0) {
@@ -2028,23 +2059,22 @@ export async function saveQuizWithQuestions(input: {
   let quizId = input.id;
   const isNewQuiz = !quizId;
 
+  // public.quizzes only has: id, lesson_id, title, passing_score,
+  // attempts_allowed, created_at, updated_at. description/time_limit_minutes/
+  // is_active are NOT persisted — they're accepted above purely so existing
+  // callers/UI keep working, but are never written to the database.
   const quizPayload: any = {
+    lesson_id: input.lesson_id,
     title: cleanTitle,
-    description: input.description?.trim() || '',
     passing_score: Number(input.passing_score) || 70,
-    time_limit_minutes: input.time_limit_minutes ? Number(input.time_limit_minutes) : null,
-    is_active: true,
     updated_at: new Date().toISOString()
   };
-
-  if (input.course_id) quizPayload.course_id = input.course_id;
-  if (input.module_id) quizPayload.module_id = input.module_id;
 
   if (isNewQuiz) {
     const { data: newQuiz, error: createQErr } = await client
       .from('quizzes')
       .insert([quizPayload])
-      .select('id, course_id, module_id, title, description, passing_score, time_limit_minutes, is_active, created_at, updated_at')
+      .select('id, lesson_id, title, passing_score, attempts_allowed, created_at, updated_at')
       .single();
 
     if (createQErr) {
@@ -2084,7 +2114,10 @@ export async function saveQuizWithQuestions(input: {
     }
   }
 
-  // Insert questions
+  // Insert questions. quiz_questions has no question_type/points column —
+  // both are accepted as input and echoed back below for the UI, but never
+  // written to the database. The app-facing "sequence_order" name maps to
+  // the real column `sequence`.
   const createdQuestions: QuizQuestion[] = [];
   for (let i = 0; i < input.questions.length; i++) {
     const qInput = input.questions[i];
@@ -2093,12 +2126,10 @@ export async function saveQuizWithQuestions(input: {
       .insert([{
         quiz_id: quizId,
         question_text: qInput.question_text.trim(),
-        question_type: qInput.question_type || 'SINGLE_CHOICE',
-        points: qInput.points || 1,
         explanation: qInput.explanation?.trim() || null,
-        sequence_order: i + 1
+        sequence: i + 1
       }])
-      .select('id, quiz_id, question_text, question_type, points, explanation, sequence_order, created_at')
+      .select('id, quiz_id, question_text, explanation, sequence, created_at, updated_at')
       .single();
 
     if (qInsertErr || !questionData) {
@@ -2106,18 +2137,19 @@ export async function saveQuizWithQuestions(input: {
       throw new Error(`Error saving question: ${qInsertErr?.message}`);
     }
 
-    // Insert options
+    // Insert options. quiz_options' app-facing "sequence_order" name maps to
+    // the real column `sequence`.
     const optionsPayload = qInput.options.map((opt, optIdx) => ({
       question_id: questionData.id,
       option_text: opt.option_text.trim(),
       is_correct: Boolean(opt.is_correct),
-      sequence_order: optIdx + 1
+      sequence: optIdx + 1
     }));
 
     const { data: optionsData, error: optInsertErr } = await client
       .from('quiz_options')
       .insert(optionsPayload)
-      .select('id, question_id, option_text, is_correct, sequence_order, created_at');
+      .select('id, question_id, option_text, is_correct, sequence, created_at');
 
     if (optInsertErr) {
       console.error('Error inserting quiz options:', optInsertErr);
@@ -2128,12 +2160,21 @@ export async function saveQuizWithQuestions(input: {
       id: questionData.id,
       quiz_id: questionData.quiz_id,
       question_text: questionData.question_text,
-      question_type: questionData.question_type,
-      points: questionData.points,
+      // NOT persisted columns — echoed back from input so the just-saved
+      // in-memory state matches what the admin entered.
+      question_type: qInput.question_type || 'SINGLE_CHOICE',
+      points: qInput.points || 1,
       explanation: questionData.explanation,
-      sequence_order: questionData.sequence_order,
+      sequence_order: questionData.sequence,
       created_at: questionData.created_at,
-      options: optionsData || []
+      options: (optionsData || []).map((opt: any) => ({
+        id: opt.id,
+        question_id: opt.question_id,
+        option_text: opt.option_text,
+        is_correct: Boolean(opt.is_correct),
+        sequence_order: opt.sequence,
+        created_at: opt.created_at
+      }))
     });
   }
 
@@ -2151,9 +2192,9 @@ export async function saveQuizWithQuestions(input: {
 
   return {
     id: quizId!,
-    course_id: input.course_id,
-    module_id: input.module_id,
+    lesson_id: input.lesson_id,
     title: cleanTitle,
+    // NOT persisted columns — echoed back from input for immediate UI consistency.
     description: input.description,
     passing_score: input.passing_score,
     time_limit_minutes: input.time_limit_minutes,
@@ -3441,7 +3482,10 @@ export async function fetchLearnerCourseCurriculum(
 
     return {
       id: q.id,
-      course_id: q.course_id,
+      lesson_id: q.lesson_id,
+      // quizzes has no course_id column — courseId is this function's own
+      // parameter (every quiz here belongs to it by construction).
+      course_id: courseId,
       module_id: q.module_id,
       title: q.title,
       description: q.description,
@@ -3588,19 +3632,20 @@ export async function markLessonCompleted(
     totalLessonsCount = allLessonIds.length;
   }
 
-  // Get total quizzes count
+  // Get total quizzes count. public.quizzes has no course_id/module_id
+  // column — the real FK is quizzes.lesson_id, so quizzes are counted via
+  // the allLessonIds already resolved above for this course's modules.
   let totalQuizzesCount = 0;
   let allQuizIds: Array<string | number> = [];
   try {
-    let qQuery = client.from('quizzes').select('id');
-    if (mIds.length > 0) {
-      qQuery = qQuery.or(`course_id.eq.${courseId},module_id.in.(${mIds.join(',')})`);
-    } else {
-      qQuery = qQuery.eq('course_id', courseId);
+    if (allLessonIds.length > 0) {
+      const { data: quizzesData } = await client
+        .from('quizzes')
+        .select('id')
+        .in('lesson_id', allLessonIds);
+      allQuizIds = (quizzesData || []).map((q: any) => q.id);
+      totalQuizzesCount = allQuizIds.length;
     }
-    const { data: quizzesData } = await qQuery;
-    allQuizIds = (quizzesData || []).map((q: any) => q.id);
-    totalQuizzesCount = allQuizIds.length;
   } catch (e) {
     console.warn('Quizzes count warning:', e);
   }
@@ -3667,12 +3712,16 @@ export async function markLessonCompleted(
         .maybeSingle();
 
       if (!existingCompletion) {
+        // course_completions has no assignment_id column — real columns are
+        // id, employee_id, course_id, final_score, completed_at,
+        // certificate_url, created_at. final_score/certificate_url are left
+        // unset here (nullable) since this function has neither a final
+        // exam score nor a generated certificate to attach.
         await client
           .from('course_completions')
           .insert([{
             course_id: courseId,
             employee_id: cleanEmpId,
-            assignment_id: assignment.id,
             completed_at: nowIso,
             created_at: nowIso
           }]);
