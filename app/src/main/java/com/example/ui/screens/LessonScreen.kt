@@ -50,9 +50,9 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.Lesson
 import com.example.data.model.LessonContentType
 import com.example.data.model.ModuleStatus
+import com.example.ui.components.Mp4VideoPlayer
 import com.example.ui.components.PdfViewerMock
 import com.example.ui.components.PrimaryButton
-import com.example.ui.components.VideoPlayerMock
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.LearningViewModel
 
@@ -206,11 +206,7 @@ fun LessonScreen(
             // Reusable Content Media Player (VIDEO / PDF / TEXT)
             when (lesson.type) {
                 LessonContentType.VIDEO -> {
-                    VideoPlayerMock(
-                        videoTitle = lesson.videoTitle ?: lesson.title,
-                        author = lesson.videoAuthor ?: "SkillUp Masterclass",
-                        durationMinutes = lesson.durationMinutes
-                    )
+                    Mp4VideoPlayer(videoUrl = lesson.videoUrl)
                 }
                 LessonContentType.PDF -> {
                     PdfViewerMock(

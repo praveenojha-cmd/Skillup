@@ -342,6 +342,9 @@ class LearningRepository private constructor(appContext: Context) {
                 keyTakeaways = emptyList(),
                 videoTitle = if (contentType == LessonContentType.VIDEO) it.title else null,
                 videoAuthor = null,
+                videoUrl = if (contentType == LessonContentType.VIDEO && !it.contentUrl.isNullOrBlank()) {
+                    it.contentUrl
+                } else null,
                 documentPagesCount = 1,
                 documentSections = if (contentType == LessonContentType.PDF && !it.contentText.isNullOrBlank()) {
                     listOf(DocumentSection(title = it.title, content = it.contentText, policyRef = null))

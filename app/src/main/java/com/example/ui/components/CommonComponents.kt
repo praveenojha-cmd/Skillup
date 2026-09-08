@@ -53,6 +53,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,14 +66,21 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import com.example.data.model.Certificate
 import com.example.data.model.Course
 import com.example.data.model.CourseModule
@@ -937,6 +945,142 @@ fun VideoPlayerMock(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Real MP4 playback via Media3 ExoPlayer. Direct progressive MP4/HTTPS URLs
+ * only — no YouTube/streaming-platform support (that needs a different
+ * playback path entirely and is explicitly out of scope here). Falls back to
+ * a friendly unavailable-state card rather than crashing when the URL is
+ * missing or the player fails to load/play it.
+ */
+@Composable
+fun Mp4VideoPlayer(
+    videoUrl: String?,
+    modifier: Modifier = Modifier
+) {
+    if (videoUrl.isNullOrBlank()) {
+        VideoUnavailableCard(message = "No video is attached to this lesson yet.", modifier = modifier)
+        return
+    }
+
+    val context = LocalContext.current
+    var playbackError by remember(videoUrl) { mutableStateOf<String?>(null) }
+    var isBuffering by remember(videoUrl) { mutableStateOf(true) }
+
+    val exoPlayer = remember(videoUrl) {
+        runCatching {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(videoUrl))
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        isBuffering = false
+                        playbackError = "This video could not be played. Please check your connection and try again."
+                    }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
+                            isBuffering = false
+                        } else if (playbackState == Player.STATE_BUFFERING) {
+                            isBuffering = true
+                        }
+                    }
+                })
+                prepare()
+            }
+        }.getOrNull()
+    }
+
+    if (exoPlayer == null) {
+        VideoUnavailableCard(message = "This video could not be loaded.", modifier = modifier)
+        return
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose { exoPlayer.release() }
+    }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Slate900),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(210.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (playbackError != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Videocam,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = playbackError.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color.White),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(36.dp),
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoUnavailableCard(message: String, modifier: Modifier = Modifier) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Slate900),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(210.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.size(32.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(alpha = 0.85f)),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
         }
     }

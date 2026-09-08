@@ -77,6 +77,7 @@ data class Lesson(
     // Video specific
     val videoTitle: String? = null,
     val videoAuthor: String? = null,
+    val videoUrl: String? = null,
     // Document specific
     val documentPagesCount: Int = 1,
     val documentSections: List<DocumentSection> = emptyList(),
