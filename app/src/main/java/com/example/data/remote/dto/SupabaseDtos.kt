@@ -152,7 +152,23 @@ data class LessonProgressDto(
 @JsonClass(generateAdapter = true)
 data class QuizAttemptDto(
     @Json(name = "quiz_id") val quizId: String,
-    @Json(name = "passed") val passed: Boolean?
+    @Json(name = "passed") val passed: Boolean?,
+    // score already stores the 0-100 percentage (see learner_submit_quiz_attempt).
+    @Json(name = "score") val score: Int?
+)
+
+// ============================================================================
+// public.course_completions (learner-owned SELECT only). Written exactly
+// once per (employee_id, course_id) by learner_submit_quiz_attempt at the
+// moment a course is actually completed — the authoritative source for the
+// course's completion date, distinct from any individual quiz attempt's
+// completed_at.
+// ============================================================================
+
+@JsonClass(generateAdapter = true)
+data class CourseCompletionDto(
+    @Json(name = "course_id") val courseId: String,
+    @Json(name = "completed_at") val completedAt: String?
 )
 
 // ============================================================================

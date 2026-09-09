@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,9 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Pause
@@ -58,6 +62,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,8 +72,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,6 +97,8 @@ import com.example.data.model.LessonContentType
 import com.example.data.model.ModuleStatus
 import com.example.data.model.QuizOption
 import com.example.ui.theme.*
+import com.example.util.CertificateShare
+import kotlinx.coroutines.launch
 
 @Composable
 fun PrimaryButton(
@@ -1256,6 +1265,11 @@ fun CertificateDialog(
     certificate: Certificate,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var isSharing by remember { mutableStateOf(false) }
+    var shareError by remember { mutableStateOf<String?>(null) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -1313,12 +1327,13 @@ fun CertificateDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Certificate Inner Frame
+                // Certificate Inner Frame — same data as the shared PNG
+                // (CertificateImageRenderer), just rendered as Compose UI.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(GoldBadgeBg)
+                        .background(Color.White)
                         .border(1.dp, GoldBadge.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
                         .padding(20.dp),
                     contentAlignment = Alignment.Center
@@ -1326,16 +1341,27 @@ fun CertificateDialog(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "SKILLUP ACADEMY",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                color = Slate600,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 2.sp
-                            )
+                        Image(
+                            painter = painterResource(id = com.example.R.drawable.rupeek_logo),
+                            contentDescription = "Rupeek",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .heightIn(max = 40.dp)
+                                .widthIn(max = 140.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Image(
+                            painter = painterResource(id = com.example.R.drawable.skillup_academy_logo),
+                            contentDescription = "SkillUp Academy",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .heightIn(max = 34.dp)
+                                .widthIn(max = 120.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
                             text = "This is proudly presented to",
@@ -1366,7 +1392,7 @@ fun CertificateDialog(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "for successfully completing all modules & final assessment in",
+                            text = "for successfully completing",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = Slate600
                             ),
@@ -1384,65 +1410,181 @@ fun CertificateDialog(
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // Score & Date Row
+                        // Assessment Score / Passing Score / Modules Completed
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White)
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .background(GoldBadgeBg)
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "Score Achieved",
-                                    style = MaterialTheme.typography.labelSmall.copy(color = Slate400, fontSize = 10.sp)
-                                )
-                                Text(
-                                    text = "${certificate.scorePercentage}%",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = SuccessGreen,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "Date Awarded",
-                                    style = MaterialTheme.typography.labelSmall.copy(color = Slate400, fontSize = 10.sp)
-                                )
-                                Text(
-                                    text = certificate.completionDate,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = Slate800,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                )
-                            }
+                            CertificateStat(label = "Assessment Score", value = "${certificate.scorePercentage}%", valueColor = SuccessGreen)
+                            CertificateStat(label = "Passing Score", value = "${certificate.passingScorePercentage}%", valueColor = Slate800)
+                            CertificateStat(label = "Modules Completed", value = "${certificate.totalModulesCompleted}/${certificate.totalModules}", valueColor = Slate800)
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        Text(
-                            text = "Credential ID: ${certificate.certificateNumber}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = Slate400,
-                                fontSize = 10.sp
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            CertificateStat(
+                                label = "Date Awarded",
+                                value = certificate.completionDate.ifBlank { "Not available yet" },
+                                valueColor = Slate800
                             )
-                        )
+                            CertificateStat(label = "Credential ID", value = certificate.certificateNumber, valueColor = Slate600)
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                if (shareError != null) {
+                    // Error is conveyed by the icon + message text, not color alone.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = ErrorRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = shareError.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall.copy(color = ErrorRed),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
                 PrimaryButton(
+                    text = if (isSharing) "PREPARING..." else "SHARE CERTIFICATE",
+                    onClick = {
+                        if (!isSharing) {
+                            isSharing = true
+                            shareError = null
+                            coroutineScope.launch {
+                                try {
+                                    CertificateShare.share(context, certificate)
+                                } catch (e: Exception) {
+                                    shareError = "Couldn't share the certificate. Please try again."
+                                } finally {
+                                    isSharing = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isSharing,
+                    leadingIcon = if (!isSharing) Icons.Default.Share else null,
+                    modifier = Modifier.fillMaxWidth(),
+                    testTag = "share_certificate_button"
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                SkillUpOutlinedButton(
                     text = "Close Preview",
                     onClick = onDismiss,
+                    enabled = !isSharing,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CertificateStat(label: String, value: String, valueColor: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(color = Slate400, fontSize = 10.sp),
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelMedium.copy(
+                color = valueColor,
+                fontWeight = FontWeight.Bold
+            ),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * Single reusable brand identity mark — the two approved official assets
+ * (app/src/main/res/drawable-nodpi/rupeek_logo.png and
+ * skillup_academy_logo.png), never redrawn/recolored/distorted here, just
+ * scaled by height (aspect ratio preserved via ContentScale.FillHeight).
+ * Every screen's branding (subtle, standard, or strong) is one call to this
+ * composable with different parameters — no per-screen duplication.
+ */
+@Composable
+fun BrandMark(
+    modifier: Modifier = Modifier,
+    showRupeek: Boolean = true,
+    showAcademy: Boolean = true,
+    stacked: Boolean = false,
+    logoHeight: androidx.compose.ui.unit.Dp = 16.dp
+) {
+    val rupeek: @Composable () -> Unit = {
+        Image(
+            painter = painterResource(id = com.example.R.drawable.rupeek_logo),
+            contentDescription = "Rupeek",
+            contentScale = ContentScale.FillHeight,
+            modifier = Modifier.height(logoHeight)
+        )
+    }
+    // SkillUp Academy's artwork includes a second "ACADEMY" line, so it
+    // reads at a comparable visual weight to Rupeek's single-line wordmark
+    // when given slightly more height.
+    val academy: @Composable () -> Unit = {
+        Image(
+            painter = painterResource(id = com.example.R.drawable.skillup_academy_logo),
+            contentDescription = "SkillUp Academy",
+            contentScale = ContentScale.FillHeight,
+            modifier = Modifier.height(logoHeight * 1.2f)
+        )
+    }
+
+    if (stacked) {
+        Column(
+            modifier = modifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(logoHeight * 0.5f)
+        ) {
+            if (showRupeek) rupeek()
+            if (showAcademy) academy()
+        }
+    } else {
+        Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (showRupeek) rupeek()
+            if (showRupeek && showAcademy) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(logoHeight * 0.7f)
+                        .background(Slate300)
+                )
+            }
+            if (showAcademy) academy()
         }
     }
 }

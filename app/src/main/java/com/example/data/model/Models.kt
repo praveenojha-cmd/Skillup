@@ -49,7 +49,14 @@ data class Course(
     val modules: List<CourseModule>,
     val finalQuizId: String? = null,
     val certificateId: String? = null,
-    val instructor: String = "Internal L&D Team"
+    val instructor: String = "Internal L&D Team",
+    /** Formatted (e.g. "01 September 2026") from public.course_completions
+     *  .completed_at — the authoritative COURSE completion instant (written
+     *  once, server-side, when the course is actually completed), not a
+     *  quiz attempt's timestamp. Null until the course is actually
+     *  COMPLETED and that row has been fetched; never a fabricated or
+     *  device-clock date. */
+    val completionDate: String? = null
 )
 
 data class CourseModule(
@@ -121,7 +128,11 @@ data class Quiz(
     /** From a real, server-persisted public.quiz_attempts row (passed=true)
      *  for this employee — NOT an in-memory-only flag, so it survives app
      *  restarts. Refreshed each time loadCourseCurriculum() runs. */
-    val isPassed: Boolean = false
+    val isPassed: Boolean = false,
+    /** quiz_attempts.score (already a 0-100 percentage) of this employee's
+     *  passed attempt, sourced the same way as [isPassed]. Null until a
+     *  passed attempt exists. */
+    val lastAttemptScorePercentage: Int? = null
 )
 
 data class QuizAttempt(
@@ -143,7 +154,9 @@ data class Certificate(
     val employeeCode: String,
     val completionDate: String,
     val scorePercentage: Int,
+    val passingScorePercentage: Int,
     val totalModulesCompleted: Int,
+    val totalModules: Int,
     val authorizedBy: String = "Director of Learning & Development",
     val organization: String = "Enterprise Learning Academy"
 )

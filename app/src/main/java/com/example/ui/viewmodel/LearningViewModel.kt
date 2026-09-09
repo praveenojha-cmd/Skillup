@@ -409,8 +409,20 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
      */
     fun viewCertificate(courseId: String) {
         val course = repository.getCourse(courseId)
-        val attempt = course?.finalQuizId?.let { repository.getQuizAttempt(it) }
+        // The course's real quiz (this app currently has at most one quiz
+        // per course, attached to its final module) — course.finalQuizId is
+        // never populated by the repository, so it is not used here.
+        val quiz = course?.modules?.firstNotNullOfOrNull { it.quiz }
         val user = currentUser.value
+        val totalModules = course?.moduleCount ?: course?.modules?.size ?: 0
+        val modulesCompleted = course?.modules?.count { it.status == ModuleStatus.COMPLETED } ?: 0
+        // Prefer the durable, server-persisted score (quiz_attempts.score,
+        // survives app restarts); fall back to this session's in-memory
+        // attempt (available immediately after submission, before the next
+        // curriculum reload); never a fabricated value.
+        val scorePercentage = quiz?.lastAttemptScorePercentage
+            ?: quiz?.id?.let { repository.getQuizAttempt(it) }?.scorePercentage
+            ?: 0
         _activeCertificate.value = Certificate(
             id = "CERT-$courseId",
             certificateNumber = "SKU-${courseId.uppercase()}",
@@ -418,9 +430,11 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
             courseTitle = course?.title ?: "SkillUp Course",
             recipientName = user?.name ?: "SkillUp Learner",
             employeeCode = user?.employeeCode ?: "",
-            completionDate = "",
-            scorePercentage = attempt?.scorePercentage ?: course?.completionPercentage ?: 0,
-            totalModulesCompleted = course?.modules?.count { it.status == com.example.data.model.ModuleStatus.COMPLETED } ?: 0
+            completionDate = course?.completionDate ?: "",
+            scorePercentage = scorePercentage,
+            passingScorePercentage = quiz?.passingScorePercentage ?: 70,
+            totalModulesCompleted = modulesCompleted,
+            totalModules = totalModules
         )
     }
 

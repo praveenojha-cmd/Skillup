@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.BrandMark
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.SkillUpOutlinedButton
@@ -120,7 +121,12 @@ fun ProfileScreen(
             )
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Subtle identity only.
+        BrandMark(logoHeight = 12.dp)
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         // Profile Identity Card
         Card(

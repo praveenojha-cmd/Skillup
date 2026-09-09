@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CourseStatus
+import com.example.ui.components.BrandMark
 import com.example.ui.components.CourseCard
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SectionHeader
@@ -104,6 +105,11 @@ fun HomeScreen(
     ) {
         item {
             Spacer(modifier = Modifier.height(4.dp))
+
+            // Subtle identity — dashboard content stays primary.
+            BrandMark(logoHeight = 12.dp)
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Greeting & Clean Avatar Row
             Row(

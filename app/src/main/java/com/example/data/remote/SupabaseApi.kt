@@ -2,6 +2,7 @@ package com.example.data.remote
 
 import com.example.data.remote.dto.AuthTokenResponse
 import com.example.data.remote.dto.CourseAssignmentDto
+import com.example.data.remote.dto.CourseCompletionDto
 import com.example.data.remote.dto.EmployeeDto
 import com.example.data.remote.dto.LessonDto
 import com.example.data.remote.dto.LessonProgressDto
@@ -129,10 +130,26 @@ interface SupabaseApi {
     @GET("rest/v1/quiz_attempts")
     suspend fun getMyQuizAttempts(
         @HeaderMap headers: Map<String, String>,
-        @Query("select") select: String = "quiz_id,passed",
+        @Query("select") select: String = "quiz_id,passed,score",
         @Query("employee_id") employeeIdEq: String,
         @Query(value = "quiz_id", encoded = true) quizIdIn: String
     ): Response<List<QuizAttemptDto>>
+
+    // ------------------------------------------------------------------
+    // Course completions — RLS: learner-owned SELECT only. This is the
+    // authoritative source for a course's completion date (written once by
+    // learner_submit_quiz_attempt when the course is actually completed),
+    // distinct from any individual quiz_attempts row.
+    // ------------------------------------------------------------------
+
+    @GET("rest/v1/course_completions")
+    suspend fun getMyCourseCompletion(
+        @HeaderMap headers: Map<String, String>,
+        @Query("select") select: String = "course_id,completed_at",
+        @Query("employee_id") employeeIdEq: String,
+        @Query("course_id") courseIdEq: String,
+        @Query("limit") limit: Int = 1
+    ): Response<List<CourseCompletionDto>>
 
     // ------------------------------------------------------------------
     // Secure quiz RPCs — never query quiz_options directly (no learner

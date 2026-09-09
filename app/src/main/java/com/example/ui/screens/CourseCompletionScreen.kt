@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.BrandMark
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SkillUpOutlinedButton
 import com.example.ui.theme.*
@@ -63,6 +64,10 @@ fun CourseCompletionScreen(
     val course by viewModel.currentCourse.collectAsState()
     val courseTitle = course?.title ?: "Course"
     val totalModules = course?.moduleCount ?: 0
+    // Real passing_score from this course's quiz (same source as
+    // LearningViewModel.viewCertificate()) — never a hardcoded threshold,
+    // since different courses can have different passing scores.
+    val passingScorePercentage = course?.modules?.firstNotNullOfOrNull { it.quiz }?.passingScorePercentage ?: 70
 
     val scrollState = rememberScrollState()
 
@@ -80,6 +85,11 @@ fun CourseCompletionScreen(
                 .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Stronger identity on this milestone screen.
+            BrandMark(logoHeight = 18.dp)
+
             Spacer(modifier = Modifier.height(20.dp))
 
             // Trophy / Celebration Badge with animated ring
@@ -204,7 +214,7 @@ fun CourseCompletionScreen(
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = "PASSED (>= 70%)",
+                                text = "PASSED (>= $passingScorePercentage%)",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     color = SuccessGreen,
                                     fontWeight = FontWeight.Bold
@@ -242,7 +252,7 @@ fun CourseCompletionScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "24 August 2026",
+                                text = course?.completionDate?.takeIf { it.isNotBlank() } ?: "Not available yet",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = Slate800

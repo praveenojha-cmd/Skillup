@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CourseStatus
 import com.example.data.model.ModuleStatus
+import com.example.ui.components.BrandMark
 import com.example.ui.components.ModuleItemRow
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.SectionHeader
@@ -210,6 +211,13 @@ fun CourseDetailsScreen(
         ) {
             item {
                 Spacer(modifier = Modifier.height(4.dp))
+
+                // Subtle identity — learning content remains primary.
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    BrandMark(logoHeight = 11.dp)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Hero Card with course summary
                 Card(

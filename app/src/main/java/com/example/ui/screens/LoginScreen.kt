@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -67,6 +66,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.BrandMark
 import com.example.ui.components.PrimaryButton
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.LearningViewModel
@@ -106,36 +106,11 @@ fun LoginScreen(
         ) {
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Corporate Brand Emblem
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(CorporateNavy),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.School,
-                    contentDescription = "SkillUp Logo",
-                    tint = Color.White,
-                    modifier = Modifier.size(38.dp)
-                )
-            }
+            // Strongest brand presentation in the app: both official assets,
+            // stacked, at login only (see BrandMark in CommonComponents.kt).
+            BrandMark(stacked = true, logoHeight = 30.dp)
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            // Brand Title
-            Text(
-                text = "SKILLUP",
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    color = CorporateNavy,
-                    letterSpacing = 2.sp,
-                    fontSize = 28.sp
-                )
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
 
             // Tagline
             Text(

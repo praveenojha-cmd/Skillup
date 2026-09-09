@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.BrandMark
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.QuizOptionCard
 import com.example.ui.components.SkillUpOutlinedButton
@@ -348,6 +349,13 @@ fun QuizScreen(
                 val attempt = quizState.quizAttempt
                 val isPassed = attempt?.isPassed ?: false
                 val score = attempt?.scorePercentage ?: 0
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Subtle SkillUp Academy identity on the results view only.
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    BrandMark(showRupeek = false, logoHeight = 12.dp)
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 

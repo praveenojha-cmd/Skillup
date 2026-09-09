@@ -279,18 +279,23 @@ class LearningRepository private constructor(appContext: Context) {
                 }
             }
 
-            // Real, server-persisted pass/fail from public.quiz_attempts —
-            // this is the durable source of truth used below (NOT the
+            // Real, server-persisted pass/fail/score from public.quiz_attempts
+            // — this is the durable source of truth used below (NOT the
             // in-memory _quizAttempts map), so a previously passed
-            // assessment is still recognized after the app process is
-            // killed and restarted.
-            val passedQuizIds: Set<String> = if (quizByLessonId.isNotEmpty()) {
+            // assessment (and its score) is still recognized after the app
+            // process is killed and restarted.
+            val passedAttempts = if (quizByLessonId.isNotEmpty()) {
                 val quizIdsIn = "in.(${quizByLessonId.values.joinToString(",") { it.id }})"
                 val attemptsResp = api.getMyQuizAttempts(headers = headers, employeeIdEq = "eq.$employeeId", quizIdIn = quizIdsIn)
                 if (attemptsResp.isSuccessful) {
-                    attemptsResp.body().orEmpty().filter { it.passed == true }.map { it.quizId }.toSet()
-                } else emptySet()
-            } else emptySet()
+                    attemptsResp.body().orEmpty().filter { it.passed == true }
+                } else emptyList()
+            } else emptyList()
+            val passedQuizIds: Set<String> = passedAttempts.map { it.quizId }.toSet()
+            val scoreByQuizId: Map<String, Int> = passedAttempts
+                .filter { it.score != null }
+                .groupBy({ it.quizId }, { it.score!! })
+                .mapValues { (_, scores) -> scores.max() }
 
             val progressByLessonId: Map<String, String> = if (lessonDtos.isNotEmpty()) {
                 val lessonIdsIn = "in.(${lessonDtos.joinToString(",") { it.id }})"
@@ -311,7 +316,7 @@ class LearningRepository private constructor(appContext: Context) {
                     !foundCurrent -> { foundCurrent = true; ModuleStatus.CURRENT }
                     else -> ModuleStatus.LOCKED
                 }
-                buildModule(m, lessonDto, quizDto, moduleStatus, index + 1, moduleDtos.size, passedQuizIds)
+                buildModule(m, lessonDto, quizDto, moduleStatus, index + 1, moduleDtos.size, passedQuizIds, scoreByQuizId)
             }
 
             // A module only counts as fully done for progress/completion
@@ -340,11 +345,34 @@ class LearningRepository private constructor(appContext: Context) {
                 else -> existing.status
             }
 
+            // The certificate/completion date represents COURSE completion,
+            // not a quiz attempt — sourced ONLY from public.course_completions
+            // (written once by learner_submit_quiz_attempt when the course
+            // is actually completed), freshly re-derived on every load. If
+            // the course isn't COMPLETED, or the lookup fails / returns no
+            // row / returns an unparseable timestamp, this is explicitly
+            // null — NEVER the previous in-memory value, a quiz-attempt
+            // date, or a device-clock date. A stale date must never survive
+            // a load where the authoritative source couldn't confirm it.
+            val freshCompletionDate: String? = if (newStatus == CourseStatus.COMPLETED) {
+                val completionResp = api.getMyCourseCompletion(
+                    headers = headers,
+                    employeeIdEq = "eq.$employeeId",
+                    courseIdEq = "eq.$courseId"
+                )
+                if (completionResp.isSuccessful) {
+                    completionResp.body().orEmpty()
+                        .firstOrNull()
+                        ?.completedAt
+                        ?.let { formatCompletionDate(it) }
+                } else null
+            } else null
             val updated = existing.copy(
                 modules = courseModules,
                 moduleCount = courseModules.size,
                 completionPercentage = newPercentage,
-                status = newStatus
+                status = newStatus,
+                completionDate = freshCompletionDate
             )
             replaceCourse(updated)
             RepoResult.Success(updated)
@@ -360,7 +388,8 @@ class LearningRepository private constructor(appContext: Context) {
         status: ModuleStatus,
         moduleOrder: Int,
         totalModules: Int,
-        passedQuizIds: Set<String> = emptySet()
+        passedQuizIds: Set<String> = emptySet(),
+        scoreByQuizId: Map<String, Int> = emptyMap()
     ): CourseModule {
         val contentType = lessonContentType(lessonDto?.lessonType, quizDto != null)
         val lesson = lessonDto?.let {
@@ -401,7 +430,8 @@ class LearningRepository private constructor(appContext: Context) {
                 totalQuestions = 0,
                 passingScorePercentage = (it.passingScore ?: 70.0).toInt(),
                 questions = emptyList(), // loaded on-demand via loadQuiz()
-                isPassed = passedQuizIds.contains(it.id)
+                isPassed = passedQuizIds.contains(it.id),
+                lastAttemptScorePercentage = scoreByQuizId[it.id]
             )
         }
 
@@ -590,6 +620,7 @@ class LearningRepository private constructor(appContext: Context) {
         answers: Map<String, String>
     ): RepoResult<QuizAttempt> = withContext(Dispatchers.IO) {
         val token = accessToken ?: return@withContext RepoResult.Failure("Not signed in.")
+        val employeeId = _currentUser.value?.id
         val assignmentId = assignmentIdByCourseId[courseId]
             ?: return@withContext RepoResult.Failure("No active assignment found for this course.")
 
@@ -625,10 +656,36 @@ class LearningRepository private constructor(appContext: Context) {
             // directly from the RPC response, never recomputed locally.
             getCourse(courseId)?.let { course ->
                 val newStatus = if (result.isCourseCompleted == true) CourseStatus.COMPLETED else CourseStatus.IN_PROGRESS
+                // Freshly re-derived every time, exactly like loadCourseCurriculum()
+                // — never the course's previous in-memory completionDate, a
+                // quiz-attempt date, or a device-clock date. If the course
+                // isn't completed, or the course_completions lookup fails /
+                // returns no row / an unparseable timestamp, this is
+                // explicitly null so a stale date can never survive.
+                var freshCompletionDate: String? = null
+                if (result.isCourseCompleted == true && employeeId != null) {
+                    // Source the actual server-persisted COURSE completion
+                    // instant from the just-inserted course_completions row
+                    // (RLS: learner-owned SELECT only) — this represents
+                    // course completion, not a single quiz attempt, and is
+                    // never the device clock.
+                    val completionResp = api.getMyCourseCompletion(
+                        headers = headers,
+                        employeeIdEq = "eq.$employeeId",
+                        courseIdEq = "eq.$courseId"
+                    )
+                    if (completionResp.isSuccessful) {
+                        freshCompletionDate = completionResp.body().orEmpty()
+                            .firstOrNull()
+                            ?.completedAt
+                            ?.let { iso -> formatCompletionDate(iso) }
+                    }
+                }
                 replaceCourse(
                     course.copy(
                         completionPercentage = result.courseProgressUpdated ?: course.completionPercentage,
-                        status = newStatus
+                        status = newStatus,
+                        completionDate = freshCompletionDate
                     )
                 )
             }
@@ -729,6 +786,26 @@ class LearningRepository private constructor(appContext: Context) {
         val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         fmt.timeZone = TimeZone.getTimeZone("UTC")
         return fmt.format(java.util.Date())
+    }
+
+    /**
+     * Formats a real Postgres timestamptz string (e.g.
+     * "2026-09-01T10:23:45.123456+00:00" or "...Z") for display, e.g.
+     * "01 September 2026". Returns null (never a fabricated/"now" date) if
+     * the value can't be parsed.
+     */
+    private fun formatCompletionDate(iso: String): String? {
+        return try {
+            val normalized = iso
+                .replace(Regex("\\.\\d+"), "")
+                .let { if (it.endsWith("Z")) it.dropLast(1) + "+0000" else it }
+                .let { s -> Regex("([+-]\\d{2}):(\\d{2})$").replace(s) { m -> m.groupValues[1] + m.groupValues[2] } }
+            val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+            val date = parser.parse(normalized) ?: return null
+            SimpleDateFormat("dd MMMM yyyy", Locale.US).format(date)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     companion object {
