@@ -61,8 +61,8 @@ fun CourseCompletionScreen(
     modifier: Modifier = Modifier
 ) {
     val course by viewModel.currentCourse.collectAsState()
-    val courseTitle = course?.title ?: "Gold Loan Product Knowledge"
-    val totalModules = course?.moduleCount ?: 6
+    val courseTitle = course?.title ?: "Course"
+    val totalModules = course?.moduleCount ?: 0
 
     val scrollState = rememberScrollState()
 

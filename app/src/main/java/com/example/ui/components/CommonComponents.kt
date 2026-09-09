@@ -461,7 +461,7 @@ fun CourseCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${course.moduleCount} Modules",
+                        text = "${course.moduleCount?.toString() ?: "—"} Modules",
                         style = MaterialTheme.typography.labelMedium.copy(
                             color = Slate500,
                             fontWeight = FontWeight.Medium,

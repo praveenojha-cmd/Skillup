@@ -39,7 +39,10 @@ data class Course(
     val fullDescription: String,
     val category: String,
     val level: String,
-    val moduleCount: Int,
+    /** Null means "not yet loaded" (e.g. the lightweight Home course list,
+     *  before this course's curriculum has been fetched) — distinct from a
+     *  genuine, confirmed zero-module course. */
+    val moduleCount: Int?,
     val durationMinutes: Int,
     val completionPercentage: Int,
     val status: CourseStatus,

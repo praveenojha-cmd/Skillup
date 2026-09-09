@@ -66,10 +66,12 @@ fun HomeScreen(
     val userInitials = user?.name?.split(" ")?.mapNotNull { it.firstOrNull()?.toString() }?.take(2)?.joinToString("") ?: "RS"
     val inProgressCourse = courses.find { it.status == CourseStatus.IN_PROGRESS } ?: courses.firstOrNull()
 
-    // Calculate dynamic overall progress across all modules
-    val totalModulesAll = courses.sumOf { it.moduleCount }
-    val completedModulesAll = courses.sumOf { (it.completionPercentage * it.moduleCount) / 100 }
-    val overallProgressPercent = if (totalModulesAll > 0) (completedModulesAll * 100) / totalModulesAll else 78
+    // Calculate dynamic overall progress across all modules. Courses whose
+    // curriculum hasn't loaded yet (moduleCount == null) simply don't
+    // contribute here — no fabricated fallback if nothing is known yet.
+    val totalModulesAll = courses.sumOf { it.moduleCount ?: 0 }
+    val completedModulesAll = courses.sumOf { (it.completionPercentage * (it.moduleCount ?: 0)) / 100 }
+    val overallProgressPercent = if (totalModulesAll > 0) (completedModulesAll * 100) / totalModulesAll else 0
 
     val animatedOverallProgress by animateFloatAsState(
         targetValue = overallProgressPercent / 100f,
@@ -246,7 +248,7 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "${user?.coursesCompletedCount ?: 5} of ${user?.coursesAssignedCount ?: 8} Courses Completed",
+                                text = "${user?.coursesCompletedCount ?: 0} of ${user?.coursesAssignedCount ?: 0} Courses Completed",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = Color.White.copy(alpha = 0.85f),
                                     fontWeight = FontWeight.Medium,
@@ -254,7 +256,7 @@ fun HomeScreen(
                                 )
                             )
                             Text(
-                                text = "Avg Score: ${user?.avgScorePercentage ?: 84}%",
+                                text = "Avg Score: ${user?.avgScorePercentage ?: 0}%",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
@@ -349,7 +351,7 @@ fun HomeScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "${inProgressCourse.moduleCount} Modules",
+                                    text = "${inProgressCourse.moduleCount?.toString() ?: "—"} Modules",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = Slate500,
                                         fontSize = 12.sp

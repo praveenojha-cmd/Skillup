@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.BuildConfig
 import com.example.data.local.SessionStore
 import com.example.data.model.Course
 import com.example.data.model.CourseModule
@@ -227,7 +228,10 @@ class LearningRepository private constructor(appContext: Context) {
             fullDescription = c.description.orEmpty(),
             category = c.category ?: "General",
             level = c.difficulty ?: "Intermediate",
-            moduleCount = 0,
+            // Curriculum not fetched yet at this lightweight assignment-list
+            // stage — null (unknown), not a fabricated 0. loadCourseCurriculum()
+            // fills in the real count once the learner opens this course.
+            moduleCount = null,
             durationMinutes = c.estimatedDurationMinutes ?: 0,
             completionPercentage = if (status == CourseStatus.COMPLETED) 100 else 0,
             status = status,
@@ -373,19 +377,30 @@ class LearningRepository private constructor(appContext: Context) {
             courseId = m.courseId,
             orderIndex = m.sequence ?: moduleOrder,
             title = m.title,
-            subtitle = m.description ?: (if (quiz != null) "Assessment" else ""),
+            subtitle = m.description ?: contentType.label,
             durationMinutes = lesson?.durationMinutes ?: 0,
             type = contentType,
             status = status,
-            lesson = if (quiz == null) lesson else null,
+            // A lesson and its quiz are sequential steps of the SAME module
+            // (courses -> modules -> lessons -> quizzes(lesson_id)), not
+            // mutually exclusive alternatives — keep both whenever both
+            // exist so the video/content is actually reachable. See
+            // LearningViewModel.openModule() for the lesson-then-quiz
+            // sequencing this enables.
+            lesson = lesson,
             quiz = quiz
         )
     }
 
+    // Real lesson content (video/pdf/text) always takes priority for the
+    // module's displayed type — a quiz attached to that lesson is a
+    // follow-on step, not the module's identity. QUIZ is only used when
+    // there is no lesson content type to derive from at all.
     private fun lessonContentType(lessonType: String?, hasQuiz: Boolean): LessonContentType = when {
-        hasQuiz -> LessonContentType.QUIZ
         lessonType.equals("VIDEO", ignoreCase = true) -> LessonContentType.VIDEO
         lessonType.equals("PDF", ignoreCase = true) -> LessonContentType.PDF
+        lessonType.equals("TEXT", ignoreCase = true) || lessonType.equals("ARTICLE", ignoreCase = true) -> LessonContentType.TEXT
+        hasQuiz -> LessonContentType.QUIZ
         else -> LessonContentType.TEXT
     }
 
@@ -607,8 +622,41 @@ class LearningRepository private constructor(appContext: Context) {
 
     private fun rpcErrorMessage(response: Response<*>, action: String): String {
         if (response.code() == 401) return "Your session has expired. Please sign in again."
+
+        // Retrofit's error ResponseBody can only be read once — read it here
+        // a single time and reuse it below for both the existing 403
+        // sub-message detection and the debug-only diagnostic.
+        val rawError = try {
+            response.errorBody()?.string()
+        } catch (e: Exception) {
+            null
+        }
+
+        // ------------------------------------------------------------------
+        // TEMPORARY DEBUG-ONLY DIAGNOSTIC (SkillUp quiz-submission HTTP 400
+        // investigation). Logcat only, and only in debug builds — never
+        // shown to the learner (the existing user-facing message below is
+        // unchanged). Logs ONLY the HTTP status, the RPC's own path, and the
+        // server's sanitized error message — it deliberately never logs the
+        // request body (which contains the learner's p_answers), headers,
+        // the access token, or the Supabase anon key. Remove once the quiz
+        // submission root cause is confirmed and fixed.
+        // ------------------------------------------------------------------
+        if (BuildConfig.DEBUG) {
+            val endpoint = try {
+                response.raw().request.url.encodedPath
+            } catch (e: Exception) {
+                "unknown"
+            }
+            android.util.Log.w(
+                "SkillUpRpcDiagnostic",
+                "RPC call failed — endpoint=$endpoint, action=\"$action\", " +
+                    "HTTP ${response.code()}, server response: ${rawError ?: "<empty>"}"
+            )
+        }
+
         if (response.code() == 403) {
-            val raw = response.errorBody()?.string().orEmpty()
+            val raw = rawError.orEmpty()
             return when {
                 raw.contains("attempt", ignoreCase = true) -> "You have used all allowed attempts for this quiz."
                 raw.contains("assignment", ignoreCase = true) -> "You do not have an active assignment for this course."

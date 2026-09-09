@@ -298,7 +298,7 @@ fun CourseDetailsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "${currentCourse.moduleCount} Modules",
+                                    text = "${currentCourse.moduleCount ?: 0} Modules",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = Slate800,
                                         fontWeight = FontWeight.SemiBold

@@ -7,6 +7,7 @@ import com.example.data.model.Certificate
 import com.example.data.model.Course
 import com.example.data.model.CourseModule
 import com.example.data.model.Employee
+import com.example.data.model.ModuleStatus
 import com.example.data.model.Quiz
 import com.example.data.model.QuizAttempt
 import com.example.data.repository.LearningRepository
@@ -249,14 +250,23 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * A module's lesson and its quiz are sequential steps, not alternatives —
+     * open the lesson first if it exists and hasn't been completed yet;
+     * otherwise (already completed, or no lesson at all) go straight to the
+     * quiz when one exists. [ModuleStatus.COMPLETED] already reflects real
+     * lesson_progress state (see LearningRepository.loadCourseCurriculum),
+     * so it's reused here rather than tracking completion separately.
+     */
     fun openModule(courseId: String, module: CourseModule) {
         _currentCourseId.value = courseId
         _currentModuleId.value = module.id
 
-        if (module.quiz != null) {
-            startQuiz(courseId, module.quiz.id)
-        } else {
-            navigateTo(ScreenDestination.LessonView(courseId, module.id))
+        when {
+            module.lesson != null && module.status != ModuleStatus.COMPLETED ->
+                navigateTo(ScreenDestination.LessonView(courseId, module.id))
+            module.quiz != null -> startQuiz(courseId, module.quiz.id)
+            module.lesson != null -> navigateTo(ScreenDestination.LessonView(courseId, module.id))
         }
     }
 
@@ -268,11 +278,15 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
             when (val result = repository.markModuleComplete(cId, mId)) {
                 is RepoResult.Success -> {
                     val updatedCourse = result.data
-                    _toastMessage.value = "Module marked complete! Next module unlocked."
-                    if (updatedCourse.completionPercentage == 100) {
-                        navigateTo(ScreenDestination.CourseCompletion(cId, 100))
-                    } else {
-                        navigateBack()
+                    val updatedModule = updatedCourse.modules.find { it.id == mId }
+                    _toastMessage.value = "Lesson marked complete!"
+                    // Sequential flow: if this lesson's module has a quiz,
+                    // go there next (reusing the existing startQuiz path)
+                    // instead of just navigating back to the syllabus.
+                    when {
+                        updatedModule?.quiz != null -> startQuiz(cId, updatedModule.quiz.id)
+                        updatedCourse.completionPercentage == 100 -> navigateTo(ScreenDestination.CourseCompletion(cId, 100))
+                        else -> navigateBack()
                     }
                 }
                 is RepoResult.Failure -> {
