@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +54,20 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.LearningViewModel
 import com.example.ui.viewmodel.ScreenDestination
+import java.util.Calendar
+
+/**
+ * Device-local-time greeting. Uses java.util.Calendar (not java.time,
+ * which needs API 26+/core-library-desugaring — this project's minSdk is
+ * 24) and Calendar.getInstance()'s default timezone, i.e. the device's own
+ * local time, never server time.
+ */
+private fun greetingForHour(hourOfDay: Int): String = when (hourOfDay) {
+    in 5..11 -> "Good Morning"
+    in 12..16 -> "Good Afternoon"
+    in 17..20 -> "Good Evening"
+    else -> "Good Night" // 21:00–04:59
+}
 
 @Composable
 fun HomeScreen(
@@ -62,6 +77,7 @@ fun HomeScreen(
     val user by viewModel.currentUser.collectAsState()
     val courses by viewModel.allCourses.collectAsState()
 
+    val greeting = remember { greetingForHour(Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) }
     val userName = user?.name?.split(" ")?.firstOrNull() ?: "Rahul"
     val userInitials = user?.name?.split(" ")?.mapNotNull { it.firstOrNull()?.toString() }?.take(2)?.joinToString("") ?: "RS"
     val inProgressCourse = courses.find { it.status == CourseStatus.IN_PROGRESS } ?: courses.firstOrNull()
@@ -99,7 +115,7 @@ fun HomeScreen(
             ) {
                 Column {
                     Text(
-                        text = "Good Morning,",
+                        text = "$greeting,",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = Slate500,
                             fontSize = 14.sp,

@@ -547,7 +547,8 @@ fun CourseCard(
 fun ModuleItemRow(
     module: CourseModule,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onWatchAgain: (() -> Unit)? = null
 ) {
     val isClickable = module.status != ModuleStatus.LOCKED
 
@@ -691,14 +692,38 @@ fun ModuleItemRow(
                 ModuleStatus.LOCKED -> Slate400
             }
 
-            Text(
-                text = stateText,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    color = stateTextColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = stateText,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = stateTextColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
                 )
-            )
+
+                // A completed VIDEO lesson stays re-playable — this is purely
+                // a navigation shortcut back into the same LessonScreen/
+                // Mp4VideoPlayer; it never touches completion state,
+                // lesson_progress, or course_completions.
+                if (module.status == ModuleStatus.COMPLETED &&
+                    module.lesson?.type == LessonContentType.VIDEO &&
+                    onWatchAgain != null
+                ) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Watch Again",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = CorporateBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        ),
+                        modifier = Modifier
+                            .clickable { onWatchAgain() }
+                            .testTag("module_watch_again_${module.id}")
+                    )
+                }
+            }
         }
     }
 }

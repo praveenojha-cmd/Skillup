@@ -279,6 +279,19 @@ class LearningRepository private constructor(appContext: Context) {
                 }
             }
 
+            // Real, server-persisted pass/fail from public.quiz_attempts —
+            // this is the durable source of truth used below (NOT the
+            // in-memory _quizAttempts map), so a previously passed
+            // assessment is still recognized after the app process is
+            // killed and restarted.
+            val passedQuizIds: Set<String> = if (quizByLessonId.isNotEmpty()) {
+                val quizIdsIn = "in.(${quizByLessonId.values.joinToString(",") { it.id }})"
+                val attemptsResp = api.getMyQuizAttempts(headers = headers, employeeIdEq = "eq.$employeeId", quizIdIn = quizIdsIn)
+                if (attemptsResp.isSuccessful) {
+                    attemptsResp.body().orEmpty().filter { it.passed == true }.map { it.quizId }.toSet()
+                } else emptySet()
+            } else emptySet()
+
             val progressByLessonId: Map<String, String> = if (lessonDtos.isNotEmpty()) {
                 val lessonIdsIn = "in.(${lessonDtos.joinToString(",") { it.id }})"
                 val progressResp = api.getMyLessonProgress(headers = headers, employeeIdEq = "eq.$employeeId", lessonIdIn = lessonIdsIn)
@@ -298,14 +311,32 @@ class LearningRepository private constructor(appContext: Context) {
                     !foundCurrent -> { foundCurrent = true; ModuleStatus.CURRENT }
                     else -> ModuleStatus.LOCKED
                 }
-                buildModule(m, lessonDto, quizDto, moduleStatus, index + 1, moduleDtos.size)
+                buildModule(m, lessonDto, quizDto, moduleStatus, index + 1, moduleDtos.size, passedQuizIds)
             }
 
-            val completedCount = courseModules.count { it.status == ModuleStatus.COMPLETED }
-            val newPercentage = if (courseModules.isNotEmpty()) (completedCount * 100) / courseModules.size else 0
+            // A module only counts as fully done for progress/completion
+            // purposes if its lesson is watched AND (it has no quiz, or that
+            // quiz has already been passed) — matching the server's own
+            // learner_submit_quiz_attempt completion rule (lessons AND
+            // quizzes), so the course is never shown as 100%/COMPLETED
+            // before an attached assessment is actually submitted.
+            val lessonDoneCount = courseModules.count { it.status == ModuleStatus.COMPLETED }
+            val fullyDoneCount = courseModules.count { m ->
+                m.status == ModuleStatus.COMPLETED && (m.quiz == null || m.quiz.isPassed)
+            }
+            // If the server has already confirmed this course COMPLETED
+            // (course_assignments.status, reflected in `existing`), keep
+            // that — don't let a fresh session with no in-memory quiz
+            // attempts yet regress an already-completed course backwards.
+            val newPercentage = if (existing.status == CourseStatus.COMPLETED) {
+                100
+            } else if (courseModules.isNotEmpty()) {
+                (fullyDoneCount * 100) / courseModules.size
+            } else 0
             val newStatus = when {
-                completedCount == courseModules.size && courseModules.isNotEmpty() -> CourseStatus.COMPLETED
-                completedCount > 0 -> CourseStatus.IN_PROGRESS
+                existing.status == CourseStatus.COMPLETED -> CourseStatus.COMPLETED
+                fullyDoneCount == courseModules.size && courseModules.isNotEmpty() -> CourseStatus.COMPLETED
+                lessonDoneCount > 0 -> CourseStatus.IN_PROGRESS
                 else -> existing.status
             }
 
@@ -328,7 +359,8 @@ class LearningRepository private constructor(appContext: Context) {
         quizDto: com.example.data.remote.dto.QuizDto?,
         status: ModuleStatus,
         moduleOrder: Int,
-        totalModules: Int
+        totalModules: Int,
+        passedQuizIds: Set<String> = emptySet()
     ): CourseModule {
         val contentType = lessonContentType(lessonDto?.lessonType, quizDto != null)
         val lesson = lessonDto?.let {
@@ -368,7 +400,8 @@ class LearningRepository private constructor(appContext: Context) {
                 description = "",
                 totalQuestions = 0,
                 passingScorePercentage = (it.passingScore ?: 70.0).toInt(),
-                questions = emptyList() // loaded on-demand via loadQuiz()
+                questions = emptyList(), // loaded on-demand via loadQuiz()
+                isPassed = passedQuizIds.contains(it.id)
             )
         }
 
@@ -460,11 +493,23 @@ class LearningRepository private constructor(appContext: Context) {
                     m.copy(status = ModuleStatus.CURRENT)
                 } else m
             }
-            val completedCount = updatedModules.count { it.status == ModuleStatus.COMPLETED }
-            val newPercentage = if (updatedModules.isNotEmpty()) (completedCount * 100) / updatedModules.size else 0
+            // Same rule as loadCourseCurriculum(): a module only counts as
+            // fully done once its lesson is watched AND (no quiz, or that
+            // quiz already passed) — so watching a video alone never marks
+            // the course 100%/COMPLETED ahead of a still-unsubmitted quiz.
+            val lessonDoneCount = updatedModules.count { it.status == ModuleStatus.COMPLETED }
+            val fullyDoneCount = updatedModules.count { m ->
+                m.status == ModuleStatus.COMPLETED && (m.quiz == null || m.quiz.isPassed)
+            }
+            val newPercentage = if (course.status == CourseStatus.COMPLETED) {
+                100
+            } else if (updatedModules.isNotEmpty()) {
+                (fullyDoneCount * 100) / updatedModules.size
+            } else 0
             val newStatus = when {
-                completedCount == updatedModules.size -> CourseStatus.COMPLETED
-                completedCount > 0 -> CourseStatus.IN_PROGRESS
+                course.status == CourseStatus.COMPLETED -> CourseStatus.COMPLETED
+                fullyDoneCount == updatedModules.size && updatedModules.isNotEmpty() -> CourseStatus.COMPLETED
+                lessonDoneCount > 0 -> CourseStatus.IN_PROGRESS
                 else -> CourseStatus.ASSIGNED
             }
             val updatedCourse = course.copy(
@@ -664,7 +709,20 @@ class LearningRepository private constructor(appContext: Context) {
                 else -> "You don't have access to $action."
             }
         }
-        return "Unable to $action (HTTP ${response.code()}). Please try again."
+
+        val genericMessage = "Unable to $action (HTTP ${response.code()}). Please try again."
+
+        // DEBUG-ONLY: append the same sanitized server error visible on
+        // screen (not just Logcat), since capturing adb output isn't
+        // always practical during a hands-on device test. Still never
+        // includes the request body/headers/token/key — same rawError as
+        // logged above. Remove alongside the diagnostic block once the
+        // quiz submission root cause is confirmed and fixed.
+        return if (BuildConfig.DEBUG && !rawError.isNullOrBlank()) {
+            "$genericMessage\n[debug] $rawError"
+        } else {
+            genericMessage
+        }
     }
 
     private fun nowIso(): String {

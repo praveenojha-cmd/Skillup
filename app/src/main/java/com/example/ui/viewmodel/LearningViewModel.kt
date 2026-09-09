@@ -270,6 +270,19 @@ class LearningViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Re-opens an already-completed lesson purely for replay (e.g. "Watch
+     * Again" on a completed VIDEO lesson). This is only a navigation
+     * shortcut into the existing LessonScreen/Mp4VideoPlayer — unlike
+     * [openModule], it never routes to the quiz, and it does not touch
+     * completion state, lesson_progress, or course_completions in any way.
+     */
+    fun watchLessonAgain(courseId: String, module: CourseModule) {
+        _currentCourseId.value = courseId
+        _currentModuleId.value = module.id
+        navigateTo(ScreenDestination.LessonView(courseId, module.id))
+    }
+
     fun markCurrentLessonComplete() {
         val cId = _currentCourseId.value ?: return
         val mId = _currentModuleId.value ?: return

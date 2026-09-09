@@ -384,6 +384,9 @@ fun CourseDetailsScreen(
                     module = module,
                     onClick = {
                         viewModel.openModule(currentCourse.id, module)
+                    },
+                    onWatchAgain = {
+                        viewModel.watchLessonAgain(currentCourse.id, module)
                     }
                 )
             }

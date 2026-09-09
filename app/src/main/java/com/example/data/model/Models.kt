@@ -117,7 +117,11 @@ data class Quiz(
     val description: String,
     val totalQuestions: Int,
     val passingScorePercentage: Int = 70,
-    val questions: List<QuizQuestion>
+    val questions: List<QuizQuestion>,
+    /** From a real, server-persisted public.quiz_attempts row (passed=true)
+     *  for this employee — NOT an in-memory-only flag, so it survives app
+     *  restarts. Refreshed each time loadCourseCurriculum() runs. */
+    val isPassed: Boolean = false
 )
 
 data class QuizAttempt(

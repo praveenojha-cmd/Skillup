@@ -7,6 +7,7 @@ import com.example.data.remote.dto.LessonDto
 import com.example.data.remote.dto.LessonProgressDto
 import com.example.data.remote.dto.LessonProgressUpsertDto
 import com.example.data.remote.dto.ModuleDto
+import com.example.data.remote.dto.QuizAttemptDto
 import com.example.data.remote.dto.QuizDto
 import com.example.data.remote.dto.QuizQuestionRowDto
 import com.example.data.remote.dto.QuizSubmitRequestDto
@@ -117,6 +118,21 @@ interface SupabaseApi {
         @HeaderMap headers: Map<String, String>,
         @Body body: List<LessonProgressUpsertDto>
     ): Response<Void>
+
+    // ------------------------------------------------------------------
+    // Quiz attempts — RLS: "Employees can view own quiz attempts" (SELECT).
+    // Read-only lookup of whether this learner already has a passed attempt
+    // for a quiz — the durable, server-backed source of truth for
+    // completion, surviving app restarts (unlike any in-memory cache).
+    // ------------------------------------------------------------------
+
+    @GET("rest/v1/quiz_attempts")
+    suspend fun getMyQuizAttempts(
+        @HeaderMap headers: Map<String, String>,
+        @Query("select") select: String = "quiz_id,passed",
+        @Query("employee_id") employeeIdEq: String,
+        @Query(value = "quiz_id", encoded = true) quizIdIn: String
+    ): Response<List<QuizAttemptDto>>
 
     // ------------------------------------------------------------------
     // Secure quiz RPCs — never query quiz_options directly (no learner

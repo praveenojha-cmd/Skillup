@@ -143,6 +143,19 @@ data class LessonProgressDto(
 )
 
 // ============================================================================
+// public.quiz_attempts (learner-owned SELECT only — "Employees can view own
+// quiz attempts"). Read here purely to determine pass/fail durably from the
+// server, since quiz_attempts rows already persist that — no new table/
+// column, this just queries what learner_submit_quiz_attempt already wrote.
+// ============================================================================
+
+@JsonClass(generateAdapter = true)
+data class QuizAttemptDto(
+    @Json(name = "quiz_id") val quizId: String,
+    @Json(name = "passed") val passed: Boolean?
+)
+
+// ============================================================================
 // learner_get_course_quiz_questions RPC — flat row shape, grouped client-side.
 // Deliberately has NO is_correct field: the RPC never returns one.
 // ============================================================================
